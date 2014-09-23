@@ -1523,6 +1523,63 @@ let configure gen =
 		expr_s w e
 	in
 
+	let gen_annotations w metadata =
+		List.iter (function
+			| Meta.Meta, [meta], _ ->
+				write w "@";
+				(match meta with
+				| EConst(Ident i), _ ->
+					write w i
+				| ECall((EConst(Ident i), _), args), _ ->
+					write w i;
+					write w "(";
+					let fst = ref true in
+					List.iter (fun e ->
+						if !fst then fst := false else write w ", ";
+						let rec loop e = match e with
+						| EConst (Ident s | Int s | Float s), _ ->
+							write w s
+						| EConst (String s), _ ->
+							write w "\"";
+							write w (escape s);
+							write w "\""
+						| EArrayDecl el, _ ->
+							write w "{";
+							let fst = ref true in
+							List.iter (fun e ->
+								if !fst then fst := false else write w ", ";
+								loop e
+							) el;
+							write w "}"
+						| EField _, _ ->
+							let rec loop_attr = function
+							| EConst (Ident i), _ ->
+								write w i
+							| EField (ef, f), _ ->
+								loop_attr ef;
+								write w ".";
+								write w f
+							| _, p ->
+								gen.gcon.error "Invalid expression inside @:meta metadata" p
+							in
+							loop_attr e;
+						| EBinop(Ast.OpAssign, (EConst(Ident i), _), e2), _ ->
+							write w i;
+							write w "=";
+							loop e2;
+						| _, p ->
+							gen.gcon.error "Invalid expression inside @:meta metadata" p
+						in
+						loop e
+					) args;
+					write w ")";
+				| _, p ->
+					gen.gcon.error "Invalid expression inside @:meta metadata" p);
+				newline w
+			| _ -> ()
+		) metadata
+	in
+
 	let get_string_params cl_params =
 		match cl_params with
 			| [] ->
