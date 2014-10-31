@@ -841,6 +841,8 @@ let configure gen =
 
 	let ttype = get_cl ( get_type gen (["System"], "Type") ) in
 
+	let tplaincast = get_tdef ( get_type gen (["cs";"internal"],"PlainCast") ) in
+
 	let has_tdyn tl =
 		List.exists (fun t -> match follow t with
 		| TDynamic _ | TMono _ -> true
@@ -921,7 +923,7 @@ let configure gen =
 			| true, TAbstract _ when is_cs_basic_type t_changed -> t
 			| true, TDynamic _ -> t
 			| true, x ->
-				dynamic_anon
+				TType (tplaincast, [t])
 		in
 		if is_hxgeneric && List.exists (fun t -> match follow t with | TDynamic _ -> true | _ -> false) tl then
 			List.map (fun _ -> t_dynamic) tl

@@ -1,5 +1,5 @@
 /*
- * Copyright (C)2005-2012 Haxe Foundation
+ * Copyright (C)2005-2014 Haxe Foundation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -19,29 +19,6 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
-package cs;
-import cs.internal.Exceptions;
-import cs.internal.FieldLookup;
-import cs.internal.Function;
-import cs.internal.HxObject;
-import cs.internal.Runtime;
-import cs.internal.Iterator;
-import cs.internal.Null;
-import cs.internal.StringExt;
-import cs.internal.PlainCast;
-#if unsafe
-import cs.internal.BoxedPointer;
-#end
-import cs.StdTypes;
-import haxe.ds.StringMap;
-import Reflect;
+package cs.internal;
 
-class Boot
-{
-
-	@:keep public static function init():Void
-	{
-		cs.Lib.applyCultureChanges();
-	}
-
-}
+typedef PlainCast<T> = {};
