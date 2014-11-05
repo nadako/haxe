@@ -404,7 +404,6 @@ struct
 			| TAbstractDecl a -> TAbstract(a,[])
 			| _ -> assert false
 		in
-		let string_ext = get_cl ( get_type gen (["haxe";"lang"], "StringExt")) in
 		let is_string t = match follow t with | TInst({ cl_path = ([], "String") }, []) -> true | _ -> false in
 		let clstring = match basic.tstring with | TInst(cl,_) -> cl | _ -> assert false in
 		let ti64 = match ( get_type gen (["cs"], "Int64") ) with | TTypeDecl t -> TType(t,[]) | TAbstractDecl a -> TAbstract(a,[]) | _ -> assert false in
@@ -440,25 +439,8 @@ struct
 				(* end Std.int() *)
 
 				(* TODO: change cf_name *)
-				| TField(ef, FInstance({ cl_path = [], "String" }, _, { cf_name = "length" })) ->
-					{ e with eexpr = TField(run ef, FDynamic "Length") }
-				| TField(ef, FInstance({ cl_path = [], "String" }, _, { cf_name = "toLowerCase" })) ->
-					{ e with eexpr = TField(run ef, FDynamic "ToLowerInvariant") }
-				| TField(ef, FInstance({ cl_path = [], "String" }, _, { cf_name = "toUpperCase" })) ->
-					{ e with eexpr = TField(run ef, FDynamic "ToUpperInvariant") }
-
 				| TCall( { eexpr = TField(_, FStatic({ cl_path = [], "String" }, { cf_name = "fromCharCode" })) }, [cc] ) ->
 					{ e with eexpr = TNew(get_cl_from_t basic.tstring, [], [mk_cast tchar (run cc); mk_int gen 1 cc.epos]) }
-				| TCall( { eexpr = TField(ef, FInstance({ cl_path = [], "String" }, _, { cf_name = ("charAt" as field) })) }, args )
-				| TCall( { eexpr = TField(ef, FInstance({ cl_path = [], "String" }, _, { cf_name = ("charCodeAt" as field) })) }, args )
-				| TCall( { eexpr = TField(ef, FInstance({ cl_path = [], "String" }, _, { cf_name = ("indexOf" as field) })) }, args )
-				| TCall( { eexpr = TField(ef, FInstance({ cl_path = [], "String" }, _, { cf_name = ("lastIndexOf" as field) })) }, args )
-				| TCall( { eexpr = TField(ef, FInstance({ cl_path = [], "String" }, _, { cf_name = ("split" as field) })) }, args )
-				| TCall( { eexpr = TField(ef, FInstance({ cl_path = [], "String" }, _, { cf_name = ("substring" as field) })) }, args )
-				| TCall( { eexpr = TField(ef, FInstance({ cl_path = [], "String" }, _, { cf_name = ("substr" as field) })) }, args ) ->
-					{ e with eexpr = TCall(mk_static_field_access_infer string_ext field e.epos [], [run ef] @ (List.map run args)) }
-				| TCall( { eexpr = TField(ef, FInstance({ cl_path = [], "String" }, _, { cf_name = ("toString") })) }, [] ) ->
-					run ef
 				| TNew( { cl_path = ([], "String") }, [], [p] ) -> run p (* new String(myString) -> myString *)
 
 				| TCast(expr, _) when like_float expr.etype && is_pointer gen e.etype ->

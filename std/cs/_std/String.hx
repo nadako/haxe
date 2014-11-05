@@ -19,6 +19,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
+import cs.internal.StringExt;
 import cs.StdTypes;
 
 @:coreApi extern class String implements ArrayAccess<Char16> {
@@ -26,31 +27,35 @@ import cs.StdTypes;
 	@:overload private static function Compare(s1:String, s2:String):Int;
 	@:overload private static function Compare(s1:String, s2:String, kind:cs.system.StringComparison):Int;
 
+	@:native("Length")
 	var length(default,null) : Int;
 
+	@:overload(function(c:Char16, count:Int) : Void {})
 	function new(string:String) : Void;
 
+	@:native("ToUpperInvariant")
 	function toUpperCase() : String;
 
+	@:native("ToLowerInvariant")
 	function toLowerCase() : String;
 
-	function charAt( index : Int) : String;
+	inline function charAt( index : Int) : String return StringExt.charAt(this, index);
 
-	function charCodeAt( index : Int) : Null<Int>;
+	inline function charCodeAt( index : Int) : Null<Int> return StringExt.charCodeAt(this, index);
 
-	function indexOf( str : String, ?startIndex : Int ) : Int;
+	inline function indexOf( str : String, ?startIndex : Int ) : Int return StringExt.indexOf(this, str, startIndex);
 
-	function lastIndexOf( str : String, ?startIndex : Int ) : Int;
+	inline function lastIndexOf( str : String, ?startIndex : Int ) : Int return StringExt.lastIndexOf(this, str, startIndex);
 
-	function split( delimiter : String ) : Array<String>;
+	inline function split( delimiter : String ) : Array<String> return StringExt.split(this, delimiter);
 
-	function substr( pos : Int, ?len : Int ) : String;
+	inline function substr( pos : Int, ?len : Int ) : String return StringExt.substr(this, pos, len);
 
-	function substring( startIndex : Int, ?endIndex : Int ) : String;
+	inline function substring( startIndex : Int, ?endIndex : Int ) : String return StringExt.substring(this, startIndex, endIndex);
 
-	function toString() : String;
+	inline function toString() : String return this;
 
-	static function fromCharCode( code : Int ) : String;
+	inline static function fromCharCode( code : Int ) : String return new String(code, 1);
 
 	private function IndexOf(value:String, startIndex:Int, comparisonType:cs.system.StringComparison):Int;
 	private function Replace(oldValue:String, newValue:String):String;
