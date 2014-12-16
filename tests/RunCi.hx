@@ -552,7 +552,7 @@ class RunCi {
 							runCommand("haxe", ["compile-cs-unsafe.hxml"]);
 							runExe("bin/cs_unsafe/bin/Test-Debug.exe");
 					}
-					
+
 				case Flash9:
 					setupFlashPlayerDebugger();
 					runCommand("haxe", ["compile-flash9.hxml", "-D", "fdb"]);
@@ -588,6 +588,7 @@ class RunCi {
 					//getOpenFLDependencies();
 
 					testPolygonalDs();
+					testHxBitcoin();
 					// if (systemName == "Linux") testFlambe(); //#3439
 					testHxTemplo();
 					testMUnit();
@@ -630,6 +631,15 @@ class RunCi {
 		runCommand("haxe", ["build.hxml"]);
 		runCommand("python3", ["unit.py"]);
 		runCommand("node", ["unit.js"]);
+	}
+
+	static function testHxBitcoin() {
+		infoMsg("Test hxBitcoin:");
+
+		changeDirectory(unitDir);
+		haxelibInstallGit("cbatson", "hxBitcoin");
+		changeDirectory(getHaxelibPath("hxBitcoin") + "/test");
+		runCommand("sh", ["test.sh"]);
 	}
 
 	static function testMUnit() {
