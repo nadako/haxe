@@ -9915,7 +9915,10 @@ struct
 					in
 
 					let changed_params = gen.greal_type_param (TClassDecl cl) params in
-					{ e with eexpr = TNew(cl, changed_params, [ { e with eexpr = TArrayDecl(List.map run el); etype = TInst(native_array_cl, changed_params) } ]	); }
+					{ e with
+						eexpr = TNew(cl, changed_params, [ { e with eexpr = TArrayDecl(List.map run el); etype = TInst(native_array_cl, changed_params) } ]	);
+						etype = TInst(cl, changed_params);
+					}
 				| _ -> Type.map_expr run e
 		in
 		run
