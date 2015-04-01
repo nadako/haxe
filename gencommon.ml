@@ -2790,7 +2790,7 @@ struct
 	let traverse gen (should_wrap:t->bool) (wrap_throw:texpr->texpr->texpr) (unwrap_expr:tvar->pos->texpr) (rethrow_expr:texpr->texpr) (catchall_type:t) (wrapper_type:t) (catch_map:tvar->texpr->texpr) =
 		let rec run e =
 			match e.eexpr with
-					| TThrow texpr when should_wrap texpr.etype -> wrap_throw e (run texpr)
+					| TThrow (Some texpr) when should_wrap texpr.etype -> wrap_throw e (run texpr)
 					| TTry (ttry, catches) ->
 						let nowrap_catches, must_wrap_catches, catchall = List.fold_left (fun (nowrap_catches, must_wrap_catches, catchall) (v, catch) ->
 							(* first we'll see if the type is Dynamic (catchall) *)
@@ -3992,7 +3992,7 @@ struct
 					let if_expr = if is_function then
 						{
 							eexpr = TIf(if_cond,
-								{ eexpr = TThrow(mk_string "Wrong number of arguments"); etype = basic.tstring; epos = pos },
+								{ eexpr = TThrow(Some(mk_string "Wrong number of arguments")); etype = basic.tstring; epos = pos },
 								Some( { eexpr = TReturn( Some( call_expr ) ); etype = call_expr.etype; epos = pos } )
 							);
 							etype = t_dynamic;
@@ -4002,7 +4002,7 @@ struct
 						{
 							eexpr = TIf(if_cond,
 							{ eexpr = TReturn( Some( call_expr ) ); etype = call_expr.etype; epos = pos },
-							Some( { eexpr = TThrow(mk_string "Field not found or wrong number of arguments"); etype = basic.tstring; epos = pos } )
+							Some( { eexpr = TThrow(Some(mk_string "Field not found or wrong number of arguments")); etype = basic.tstring; epos = pos } )
 							);
 							etype = t_dynamic;
 							epos = pos;
@@ -4040,7 +4040,7 @@ struct
 							{
 								eexpr = TSwitch( switch_cond,
 									loop_cases api !max_arity [],
-									Some({ eexpr = TThrow(mk_string "Too many arguments"); etype = basic.tvoid; epos = pos; }) );
+									Some({ eexpr = TThrow(Some(mk_string "Too many arguments")); etype = basic.tvoid; epos = pos; }) );
 								etype = basic.tvoid;
 								epos = pos;
 							} in
@@ -5209,7 +5209,7 @@ struct
 			| TReturn(eopt) ->
 				{ expr with eexpr = TReturn(Option.map fn eopt) }
 			| TThrow (texpr) ->
-				{ expr with eexpr = TThrow(fn texpr) }
+				{ expr with eexpr = TThrow(Option.map fn texpr) }
 			| TBreak
 			| TContinue
 			| TTry _
@@ -7105,7 +7105,7 @@ struct
 	let mk_bool ctx b pos =
 		{ eexpr = TConst(TBool(b)); etype = ctx.rcf_gen.gcon.basic.tbool; epos = pos }
 
-	let mk_throw ctx str pos = { eexpr = TThrow (mk_string ctx str pos); etype = ctx.rcf_gen.gcon.basic.tvoid; epos = pos }
+	let mk_throw ctx str pos = { eexpr = TThrow (Some(mk_string ctx str pos)); etype = ctx.rcf_gen.gcon.basic.tvoid; epos = pos }
 
 	let enumerate_dynamic_fields ctx cl when_found =
 		let gen = ctx.rcf_gen in

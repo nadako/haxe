@@ -125,7 +125,7 @@ and texpr_expr =
 	| TReturn of texpr option
 	| TBreak
 	| TContinue
-	| TThrow of texpr
+	| TThrow of texpr option
 	| TCast of texpr * module_type option
 	| TMeta of metadata_entry * texpr
 	| TEnumParameter of texpr * tenum_field * int
@@ -995,7 +995,9 @@ let rec s_expr s_type e =
 		"Break"
 	| TContinue ->
 		"Continue"
-	| TThrow e ->
+	| TThrow None ->
+		"Throw"
+	| TThrow (Some e) ->
 		"Throw " ^ (loop e)
 	| TCast (e,t) ->
 		sprintf "Cast %s%s" (match t with None -> "" | Some t -> s_type_path (t_path t) ^ ": ") (loop e)
@@ -1073,7 +1075,9 @@ let rec s_expr_pretty tabs s_type e =
 		"break"
 	| TContinue ->
 		"continue"
-	| TThrow e ->
+	| TThrow None ->
+		"throw"
+	| TThrow (Some e) ->
 		"throw " ^ (loop e)
 	| TCast (e,None) ->
 		sprintf "cast %s" (loop e)
@@ -1137,7 +1141,8 @@ let rec s_expr_ast print_var_ids tabs s_type e =
 	| TIf (e,e1,e2) -> tag "If" (loop e :: (Printf.sprintf "[Then:%s] %s" (s_type e1.etype) (loop e1)) :: (match e2 with None -> [] | Some e -> [Printf.sprintf "[Else:%s] %s" (s_type e.etype) (loop e)]))
 	| TCast (e1,None) -> tag "Cast" [loop e1]
 	| TCast (e1,Some mt) -> tag "Cast" [loop e1; module_type mt]
-	| TThrow e1 -> tag "Throw" [loop e1]
+	| TThrow None -> tag "Throw" []
+	| TThrow (Some e1) -> tag "Throw" [loop e1]
 	| TBreak -> tag "Break" []
 	| TContinue -> tag "Continue" []
 	| TReturn None -> tag "Return" []
@@ -1923,7 +1928,8 @@ let iter f e =
 	| TWhile (e1,e2,_) ->
 		f e1;
 		f e2;
-	| TThrow e
+	| TThrow eo ->
+		(match eo with None -> () | Some e -> f e)
 	| TField (e,_)
 	| TEnumParameter (e,_,_)
 	| TParenthesis e
@@ -1979,7 +1985,7 @@ let map_expr f e =
 		let e1 = f e1 in
 		{ e with eexpr = TWhile (e1,f e2,flag) }
 	| TThrow e1 ->
-		{ e with eexpr = TThrow (f e1) }
+		{ e with eexpr = TThrow (match e1 with None -> None | Some e -> Some (f e)) }
 	| TEnumParameter (e1,ef,i) ->
 		 { e with eexpr = TEnumParameter(f e1,ef,i) }
 	| TField (e1,v) ->
@@ -2043,7 +2049,7 @@ let map_expr_type f ft fv e =
 		let e1 = f e1 in
 		{ e with eexpr = TWhile (e1,f e2,flag); etype = ft e.etype }
 	| TThrow e1 ->
-		{ e with eexpr = TThrow (f e1); etype = ft e.etype }
+		{ e with eexpr = TThrow (match e1 with None -> None | Some e -> Some (f e)); etype = ft e.etype }
 	| TEnumParameter (e1,ef,i) ->
 		{ e with eexpr = TEnumParameter(f e1,ef,i); etype = ft e.etype }
 	| TField (e1,v) ->

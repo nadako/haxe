@@ -539,7 +539,7 @@ struct
 			| Some edef when not !has_case ->
 				block := edef :: !block
 			| Some edef ->
-				let eelse = if is_final_ret then Some { eexpr = TThrow { eexpr = TConst(TNull); etype = t_dynamic; epos = edef.epos }; etype = basic.tvoid; epos = edef.epos } else None in
+				let eelse = if is_final_ret then Some { eexpr = TThrow (Some { eexpr = TConst(TNull); etype = t_dynamic; epos = edef.epos }); etype = basic.tvoid; epos = edef.epos } else None in
 				block := { edef with eexpr = TIf(execute_def, edef, eelse); etype = basic.tvoid } :: !block
 		);
 		{ eswitch with eexpr = TBlock(List.rev !block) }
@@ -731,7 +731,7 @@ let rec handle_throws gen cf =
 				if tdefs <> [] && not (List.for_all (fun c -> cls_any_super c !throws) tdefs) then
 					raise Exit;
 				Type.iter iter e
-			| TThrow e -> (match follow (run_follow gen e.etype) with
+			| TThrow (Some e) -> (match follow (run_follow gen e.etype) with
 				| TInst(c,_) when is_checked_exc c && not (cls_any_super c !throws) ->
 					raise Exit
 				| _ -> iter e)
@@ -745,10 +745,10 @@ let rec handle_throws gen cf =
 			let rethrow = mk_local catch_var e.epos in
 			let hx_exception = get_cl (get_type gen (["haxe";"lang"], "HaxeException")) in
 			let wrap_static = mk_static_field_access (hx_exception) "wrap" (TFun([("obj",false,t_dynamic)], t_dynamic)) rethrow.epos in
-			let wrapped = { rethrow with eexpr = TThrow { rethrow with eexpr = TCall(wrap_static, [rethrow]) }; } in
+			let wrapped = { rethrow with eexpr = TThrow (Some { rethrow with eexpr = TCall(wrap_static, [rethrow]) }); } in
 			let map_throws cl =
 				let var = alloc_var "typedException" (TInst(cl,List.map (fun _ -> t_dynamic) cl.cl_params)) in
-				var, { tf.tf_expr with eexpr = TThrow (mk_local var e.epos) }
+				var, { tf.tf_expr with eexpr = TThrow (Some (mk_local var e.epos)) }
 			in
 			cf.cf_expr <- Some { e with
 				eexpr = TFunction({ tf with
@@ -1563,7 +1563,7 @@ let configure gen =
 					if is_some eopt then expr_s w (get eopt)
 				| TBreak -> write w "break"
 				| TContinue -> write w "continue"
-				| TThrow e ->
+				| TThrow (Some e) ->
 					write w "throw ";
 					expr_s w e
 				| TCast (e1,md_t) ->
@@ -2360,7 +2360,7 @@ let configure gen =
 			(fun t -> not (is_exception (real_type t)))
 			(fun throwexpr expr ->
 				let wrap_static = mk_static_field_access (hx_exception) "wrap" (TFun([("obj",false,t_dynamic)], hx_exception_t)) expr.epos in
-				{ throwexpr with eexpr = TThrow { expr with eexpr = TCall(wrap_static, [expr]); etype = hx_exception_t }; etype = gen.gcon.basic.tvoid }
+				{ throwexpr with eexpr = TThrow (Some { expr with eexpr = TCall(wrap_static, [expr]); etype = hx_exception_t }); etype = gen.gcon.basic.tvoid }
 			)
 			(fun v_to_unwrap pos ->
 				let local = mk_cast hx_exception_t { eexpr = TLocal(v_to_unwrap); etype = v_to_unwrap.v_type; epos = pos } in
@@ -2368,7 +2368,7 @@ let configure gen =
 			)
 			(fun rethrow ->
 				let wrap_static = mk_static_field_access (hx_exception) "wrap" (TFun([("obj",false,t_dynamic)], hx_exception_t)) rethrow.epos in
-				{ rethrow with eexpr = TThrow { rethrow with eexpr = TCall(wrap_static, [rethrow]); etype = hx_exception_t }; }
+				{ rethrow with eexpr = TThrow (Some { rethrow with eexpr = TCall(wrap_static, [rethrow]); etype = hx_exception_t }); }
 			)
 			(base_exception_t)
 			(hx_exception_t)

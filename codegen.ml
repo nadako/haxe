@@ -1558,7 +1558,7 @@ let default_cast ?(vtmp="$t") com e texpr t p =
 	let std = mk (TTypeExpr std) (mk_texpr std) p in
 	let is = mk (TField (std,fis)) (tfun [t_dynamic;t_dynamic] api.tbool) p in
 	let is = mk (TCall (is,[vexpr;texpr])) api.tbool p in
-	let exc = mk (TThrow (mk (TConst (TString "Class cast error")) api.tstring p)) t p in
+	let exc = mk (TThrow (Some (mk (TConst (TString "Class cast error")) api.tstring p))) t p in
 	let check = mk (TIf (mk_parent is,mk (TCast (vexpr,None)) t p,Some exc)) t p in
 	mk (TBlock [var;check;vexpr]) t p
 

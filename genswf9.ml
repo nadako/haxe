@@ -767,7 +767,7 @@ let begin_fun ctx args tret el stat p =
 	let dparams = (match !dparams with None -> None | Some l -> Some (List.rev l)) in
 	let is_not_rethrow (_,e) =
 		match e.eexpr with
-		| TBlock [{ eexpr = TThrow { eexpr = TNew (_,_,[]) } }] -> false
+		| TBlock [{ eexpr = TThrow (Some { eexpr = TNew (_,_,[]) }) }] -> false
 		| _ -> true
 	in
 	let rec loop_try e =
@@ -1013,7 +1013,7 @@ let rec gen_expr_content ctx retval e =
 	match e.eexpr with
 	| TConst c ->
 		gen_constant ctx c e.etype e.epos
-	| TThrow e ->
+	| TThrow (Some e) ->
 		ctx.infos.icond <- true;
 		if has_feature ctx.com "haxe.CallStack.exceptionStack" then begin
 			getvar ctx (VGlobal (type_path ctx (["flash"],"Boot")));

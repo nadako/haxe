@@ -505,7 +505,7 @@ and expr dce e =
 				end;
 		end;
 		expr dce e;
-	| TThrow e ->
+	| TThrow (Some e) ->
 		check_and_add_feature dce "has_throw";
 		to_string dce e.etype;
 		expr dce e

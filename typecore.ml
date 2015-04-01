@@ -110,6 +110,7 @@ and typer = {
 	mutable curfield : tclass_field;
 	mutable untyped : bool;
 	mutable in_super_call : bool;
+	mutable in_catch : bool;
 	mutable in_loop : bool;
 	mutable in_display : bool;
 	mutable in_macro : bool;

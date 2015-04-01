@@ -1652,7 +1652,8 @@ let configure gen =
 					if is_some eopt then (write w " "; expr_s w (get eopt))
 				| TBreak -> write w "break"
 				| TContinue -> write w "continue"
-				| TThrow e ->
+				| TThrow None -> write w "throw";
+				| TThrow (Some e) ->
 					write w "throw ";
 					expr_s w e
 				| TCast (e1,md_t) ->
@@ -3086,7 +3087,7 @@ let configure gen =
 			(fun t -> not (is_exception (real_type t)))
 			(fun throwexpr expr ->
 				let wrap_static = mk_static_field_access (hx_exception) "wrap" (TFun([("obj",false,t_dynamic)], base_exception_t)) expr.epos in
-				{ throwexpr with eexpr = TThrow { expr with eexpr = TCall(wrap_static, [expr]); etype = hx_exception_t }; etype = gen.gcon.basic.tvoid }
+				{ throwexpr with eexpr = TThrow (Some { expr with eexpr = TCall(wrap_static, [expr]); etype = hx_exception_t }); etype = gen.gcon.basic.tvoid }
 			)
 			(fun v_to_unwrap pos ->
 				let local = mk_cast hx_exception_t { eexpr = TLocal(v_to_unwrap); etype = v_to_unwrap.v_type; epos = pos } in

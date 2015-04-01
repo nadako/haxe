@@ -3257,7 +3257,10 @@ and type_expr ctx (e,p) (with_type:with_type) =
 			check_unreachable acc t2 (pos e);
 			let locals = save_locals ctx in
 			let v = add_local ctx v t in
+			let old_catch = ctx.in_catch in
+			ctx.in_catch <- true;
 			let e = type_expr ctx e with_type in
+			ctx.in_catch <- old_catch;
 			v.v_type <- t2;
 			locals();
 			if with_type <> NoValue then unify ctx e.etype e1.etype e.epos;
@@ -3266,7 +3269,13 @@ and type_expr ctx (e,p) (with_type:with_type) =
 		) [] catches in
 		mk (TTry (e1,List.rev catches)) (if with_type = NoValue then ctx.t.tvoid else e1.etype) p
 	| EThrow e ->
-		let e = type_expr ctx e Value in
+		let e = (match e with
+			| None ->
+				if not ctx.in_catch then display_error ctx "Throw without arguments outside catch" p;
+				None
+			| Some e ->
+				Some (type_expr ctx e Value)
+		) in
 		mk (TThrow e) (mk_mono()) p
 	| ECall (((EConst (Ident s),pc) as e),el) ->
 		(try
@@ -4940,6 +4949,7 @@ let rec create com =
 		macro_depth = 0;
 		untyped = false;
 		curfun = FunStatic;
+		in_catch = false;
 		in_loop = false;
 		in_super_call = false;
 		in_display = false;

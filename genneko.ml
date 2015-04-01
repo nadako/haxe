@@ -364,7 +364,7 @@ and gen_expr ctx e =
 		(EBreak None,p)
 	| TContinue ->
 		(EContinue,p)
-	| TThrow e ->
+	| TThrow (Some e) ->
 		call p (builtin p "throw") [gen_expr ctx e]
 	| TCast (e,None) ->
 		gen_expr ctx e

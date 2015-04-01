@@ -871,9 +871,9 @@ module Transformer = struct
 			let block = TBlock([a_expr; { a_expr with eexpr = TConst(TNull) }]) in
 			let r = { a_expr with eexpr = block } in
 			forward_transform r ae
-		| (false, TThrow(x)) ->
+		| (false, TThrow(Some(x))) ->
 			let x = trans true [] x in
-			let r = { a_expr with eexpr = TThrow(x.a_expr)} in
+			let r = { a_expr with eexpr = TThrow(Some x.a_expr)} in
 			lift false x.a_blocks r
 		| (_, TNew(c, tp, params)) ->
 			let params = List.map (trans true []) params in
@@ -1353,7 +1353,9 @@ module Printer = struct
 				"break"
 			| TContinue ->
 				"continue"
-			| TThrow e1 ->
+			| TThrow None ->
+				"raise"
+			| TThrow (Some e1) ->
 				let rec is_native_exception t =
 					match Abstract.follow_with_abstracts t with
 					| TInst ({ cl_path = [],"BaseException" }, _) ->

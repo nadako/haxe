@@ -1084,7 +1084,7 @@ let convert_switch mctx st cases loop =
 (* Decision tree compilation *)
 
 let transform_extractors eval cases p =
-	let efail = (EThrow(EConst(Ident "false"),p)),p in
+	let efail = (EThrow(Some(EConst(Ident "false"),p))),p in
 	let cfail = [(EConst (Ident "_"),p)],None,Some efail in
 	let has_extractor = ref false in
 	let rec loop cases = match cases with

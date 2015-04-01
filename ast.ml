@@ -351,7 +351,7 @@ and expr_def =
 	| EBreak
 	| EContinue
 	| EUntyped of expr
-	| EThrow of expr
+	| EThrow of expr option
 	| ECast of expr * complex_type option
 	| EDisplay of expr * bool
 	| EDisplayNew of type_path
@@ -734,7 +734,7 @@ let map_expr loop (e,p) =
 	| EBreak -> EBreak
 	| EContinue -> EContinue
 	| EUntyped e -> EUntyped (loop e)
-	| EThrow e -> EThrow (loop e)
+	| EThrow e -> EThrow (opt loop e)
 	| ECast (e,t) -> ECast (loop e,opt ctype t)
 	| EDisplay (e,f) -> EDisplay (loop e,f)
 	| EDisplayNew t -> EDisplayNew (tpath t)

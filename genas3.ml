@@ -687,7 +687,7 @@ and gen_expr ctx e =
 		spr ctx "[";
 		concat ctx "," (gen_value ctx) el;
 		spr ctx "]"
-	| TThrow e ->
+	| TThrow (Some e) ->
 		spr ctx "throw ";
 		gen_value ctx e;
 	| TVar (v,eo) ->

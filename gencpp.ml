@@ -1116,7 +1116,7 @@ let rec iter_retval f retval e =
    | TFor (_,e1,e2) ->
       f true e1;
       f false e2;
-   | TThrow e
+   | TThrow (Some e)
    | TField (e,_)
    | TEnumParameter (e,_,_)
    | TUnop (_,_,e) ->
@@ -2443,7 +2443,7 @@ and gen_expression ctx retval expression =
       end;
    | TBreak -> output "break"
    | TContinue -> output "continue"
-   | TThrow expression ->
+   | TThrow (Some expression) ->
          output "HX_STACK_DO_THROW(";
          gen_expression ctx true expression;
          output ")";
@@ -5134,7 +5134,7 @@ class script_writer common_ctx ctx filename asciiOut =
    | TBinop (op,e1,e2) -> this#writeOpLine (IaBinOp op);
       this#gen_expression e1;
       this#gen_expression e2;
-   | TThrow e -> this#writeOpLine IaThrow;
+   | TThrow (Some e) -> this#writeOpLine IaThrow;
       this#gen_expression e;
    | TArrayDecl expr_list ->
       this#write ( (this#op IaADef) ^ (this#typeText expression.etype) ^ " " ^(string_of_int (List.length expr_list))^"\n");

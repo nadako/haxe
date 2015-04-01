@@ -3971,7 +3971,7 @@ and encode_expr e =
 			| EUntyped e ->
 				22, [loop e]
 			| EThrow e ->
-				23, [loop e]
+				23, [null loop e]
 			| ECast (e,t) ->
 				24, [loop e; null encode_ctype t]
 			| EDisplay (e,flag) ->
@@ -4248,7 +4248,7 @@ let rec decode_expr v =
 		| 22, [e] ->
 			EUntyped (loop e)
 		| 23, [e] ->
-			EThrow (loop e)
+			EThrow (opt loop e)
 		| 24, [e;t] ->
 			ECast (loop e,opt decode_ctype t)
 		| 25, [e;f] ->
@@ -4679,7 +4679,7 @@ and encode_texpr e =
 			| TReturn e1 -> 20,[vopt encode_texpr e1]
 			| TBreak -> 21,[]
 			| TContinue -> 22,[]
-			| TThrow e1 -> 23,[loop e1]
+			| TThrow e1 -> 23,[vopt encode_texpr e1]
 			| TCast(e1,mt) -> 24,[loop e1;match mt with None -> VNull | Some mt -> encode_module_type mt]
 			| TMeta(m,e1) -> 25,[encode_meta_entry m;loop e1]
 			| TEnumParameter(e1,ef,i) -> 26,[loop e1;encode_efield ef;VInt i]
@@ -4822,7 +4822,7 @@ let rec decode_texpr v =
 		| 20, [vo] -> TReturn(opt loop vo)
 		| 21, [] -> TBreak
 		| 22, [] -> TContinue
-		| 23, [v1] -> TThrow(loop v1)
+		| 23, [v1] -> TThrow(opt loop v1)
 		| 24, [v1;mto] -> TCast(loop v1,opt decode_module_type mto)
 		| 25, [m;v1] -> TMeta(decode_meta_entry m,loop v1)
 		| 26, [v1;ef;i] -> TEnumParameter(loop v1,decode_efield ef,match i with VInt i -> i | _ -> raise Invalid_expr)
@@ -5061,7 +5061,7 @@ let rec make_ast e =
 	| TReturn e -> EReturn (eopt e)
 	| TBreak -> EBreak
 	| TContinue -> EContinue
-	| TThrow e -> EThrow (make_ast e)
+	| TThrow e -> EThrow (eopt e)
 	| TCast (e,t) ->
 		let t = (match t with
 			| None -> None

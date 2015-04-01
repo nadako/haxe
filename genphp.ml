@@ -1388,7 +1388,7 @@ and gen_expr ctx e =
 		spr ctx "(new _hx_array(array(";
 		concat ctx ", " (gen_value ctx) el;
 		spr ctx ")))";
-	| TThrow e ->
+	| TThrow (Some e) ->
 		spr ctx "throw new HException(";
 		gen_value ctx e;
 		spr ctx ")";

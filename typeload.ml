@@ -3118,6 +3118,7 @@ let type_module ctx m file ?(is_extern=false) tdecls p =
 		in_macro = ctx.in_macro;
 		in_display = false;
 		in_loop = false;
+		in_catch = false;
 		opened = [];
 		vthis = None;
 	} in

@@ -378,9 +378,9 @@ module Simplifier = struct
 			| TReturn (Some e1) ->
 				let e1 = bind e1 in
 				{e with eexpr = TReturn (Some e1)}
-			| TThrow e1 ->
+			| TThrow (Some e1) ->
 				let e1 = bind e1 in
-				{e with eexpr = TThrow e1}
+				{e with eexpr = TThrow (Some e1)}
 			| TCast(e1,mto) ->
 				let e1 = bind ~allow_tlocal:true e1 in
 				{e with eexpr = TCast(e1,mto)}
@@ -950,14 +950,14 @@ module Ssa = struct
 				end;
 				terminate ctx;
 				e
-			| TThrow e1 ->
+			| TThrow (Some e1) ->
 				let e1 = loop ctx e1 in
 				begin match ctx.exception_stack with
 					| join :: _ -> add_branch join ctx.cur_data e.epos
 					| _ -> ()
 				end;
 				terminate ctx;
-				{e with eexpr = TThrow e1}
+				{e with eexpr = TThrow (Some e1)}
 			| TReturn eo ->
 				let eo = match eo with None -> None | Some e -> Some (loop ctx e) in
 				terminate ctx;
@@ -1389,7 +1389,8 @@ let rev_iter f e = match e.eexpr with
 	| TWhile (e1,e2,_) ->
 		f e2;
 		f e1;
-	| TThrow e
+	| TThrow eo ->
+		(match eo with None -> () | Some e -> f e)
 	| TField (e,_)
 	| TEnumParameter (e,_,_)
 	| TParenthesis e

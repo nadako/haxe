@@ -148,11 +148,11 @@ let rec wrap_js_exceptions com e =
 	in
 	let rec loop e =
 		match e.eexpr with
-		| TThrow eerr when not (is_error eerr.etype) ->
+		| TThrow (Some eerr) when not (is_error eerr.etype) ->
 			let terr = List.find (fun mt -> match mt with TClassDecl {cl_path = ["js";"_Boot"],"HaxeError"} -> true | _ -> false) com.types in
 			let cerr = match terr with TClassDecl c -> c | _ -> assert false in
 			let ewrap = { eerr with eexpr = TNew (cerr,[],[eerr]) } in
-			{ e with eexpr = TThrow ewrap }
+			{ e with eexpr = TThrow (Some ewrap) }
 		| _ ->
 			Type.map_expr loop e
 	in
@@ -261,7 +261,7 @@ let check_local_vars_init e =
 		(* mark all reachable vars as initialized, since we don't exit the block  *)
 		| TBreak | TContinue | TReturn None ->
 			vars := PMap.map (fun _ -> true) !vars
-		| TThrow e | TReturn (Some e) ->
+		| TThrow (Some e) | TReturn (Some e) ->
 			loop vars e;
 			vars := PMap.map (fun _ -> true) !vars
 		| _ ->
