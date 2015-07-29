@@ -46,7 +46,7 @@ import java.NativeArray;
 	@:functionCode('
 			return new Array<Y>((Y[]) ((java.lang.Object)new java.lang.Object[size]));
 	')
-	private static function alloc<Y>(size:Int):Array<Y>
+	public static function alloc<Y>(size:Int):Array<Y>
 	{
 		return null;
 	}

@@ -151,9 +151,10 @@ package java;
 	/**
 		Allocates a new Haxe Array with a predetermined size
 	**/
-	public static function arrayAlloc<T>(size:Int):Array<T>
+	@:deprecated("java.Lib.arrayAlloc is deprecated. Use Array.alloc instead.")
+	public static inline function arrayAlloc<T>(size:Int):Array<T>
 	{
-		return untyped Array.alloc(size);
+		return Array.alloc(size);
 	}
 
 	/**
