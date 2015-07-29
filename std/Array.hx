@@ -24,8 +24,6 @@
 	with its API.
 **/
 extern class Array<T> {
-	static function alloc<T>(size:Int):Array<T>;
-
 	/**
 		The length of `this` Array.
 	**/
@@ -35,6 +33,13 @@ extern class Array<T> {
 		Creates a new Array.
 	**/
 	function new() : Void;
+
+	/**
+		Returns a new array with pre-allocated number of `size` elements.
+
+		Each element is a default value of type `T`.
+	**/
+	static function alloc<T>(size:Int):Array<T>;
 
 	/**
 		Returns a new Array by appending the elements of `a` to the elements of
