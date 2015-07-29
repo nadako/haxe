@@ -279,3 +279,6 @@ b.length == 2;
 b[0] = 0;
 b[1] = 20;
 #end
+
+var a = Array.alloc(15);
+a.length == 15;
