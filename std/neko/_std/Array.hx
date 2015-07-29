@@ -29,6 +29,10 @@
 		this.length = 0;
 	}
 
+	public inline static function alloc<T>(size:Int):Array<T> {
+		return new1(neko.NativeArray.alloc(size), size);
+	}
+
 	private static function new1<T>(a:neko.NativeArray<T>,l:Int) : Array<T> {
 		var inst = new Array<T>();
 		inst.__a = a;
