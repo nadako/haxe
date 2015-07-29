@@ -22,6 +22,8 @@
 @:coreApi
 extern class Array<T> {
 
+	@:selfCall static function alloc<T>(size:Int):Array<T>;
+
 	var length(default,null) : Int;
 
 	function new() : Void;
@@ -69,5 +71,4 @@ extern class Array<T> {
 	@:runtime inline function iterator() : Iterator<T> {
 		return untyped HxOverrides.iter(this);
 	}
-
 }

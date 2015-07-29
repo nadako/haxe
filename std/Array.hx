@@ -24,6 +24,7 @@
 	with its API.
 **/
 extern class Array<T> {
+	static function alloc<T>(size:Int):Array<T>;
 
 	/**
 		The length of `this` Array.
