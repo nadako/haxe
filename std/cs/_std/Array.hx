@@ -42,7 +42,7 @@ import cs.NativeArray;
 	}
 #end
 
-	inline private static function alloc<Y>(size:Int):Array<Y>
+	public inline static function alloc<Y>(size:Int):Array<Y>
 	{
 		return new Array(new NativeArray(size));
 	}

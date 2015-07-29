@@ -166,9 +166,10 @@ class Lib
 	/**
 		Allocates a new Haxe Array with a predetermined size
 	**/
+	@:deprecated("cs.Lib.arrayAlloc is deprecated. Use Array.alloc instead.")
 	inline public static function arrayAlloc<T>(size:Int):Array<T>
 	{
-		return @:privateAccess Array.alloc(size);
+		return Array.alloc(size);
 	}
 
 	/**
