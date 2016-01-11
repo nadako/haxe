@@ -29,6 +29,13 @@ package haxe.format;
 **/
 class JsonParser {
 
+	#if js
+	public static var DELETE(get,never):Dynamic;
+	inline static function get_DELETE() return js.Lib.undefined;
+	#else
+	public static var DELETE(default,never) = new Delete();
+	#end
+
 	/**
 		Parses given JSON-encoded `str` and returns the resulting object.
 
@@ -39,19 +46,25 @@ class JsonParser {
 
 		If `str` is null, the result is unspecified.
 	**/
-	static public inline function parse(str : String) : Dynamic {
-		return new JsonParser(str).parseRec();
+	static public inline function parse(str : String, ?reviver:Dynamic->Dynamic->Dynamic) : Dynamic {
+		return new JsonParser(str, reviver).parseRec("");
 	}
 
 	var str : String;
 	var pos : Int;
+	var reviver : Dynamic->Dynamic->Dynamic;
 
-	function new( str : String ) {
+	function new( str : String, reviver:Dynamic->Dynamic->Dynamic ) {
 		this.str = str;
+		this.reviver = reviver;
 		this.pos = 0;
 	}
 
-	function parseRec() : Dynamic {
+	function parseRec(key:Dynamic):Dynamic {
+		return if (reviver != null) reviver(key, doParse()) else doParse();
+	}
+
+	function doParse() : Dynamic {
 		while( true ) {
 			var c = nextChar();
 			switch( c ) {
@@ -71,7 +84,9 @@ class JsonParser {
 					case ':'.code:
 						if( field == null )
 							invalidChar();
-						Reflect.setField(obj,field,parseRec());
+						var elem = parseRec(field);
+						if (elem != DELETE)
+							Reflect.setField(obj,field,elem);
 						field = null;
 						comma = true;
 					case ','.code:
@@ -84,7 +99,7 @@ class JsonParser {
 					}
 				}
 			case '['.code:
-				var arr = [], comma : Null<Bool> = null;
+				var arr = [], comma : Null<Bool> = null, i = 0;
 				while( true ) {
 					var c = nextChar();
 					switch( c ) {
@@ -98,7 +113,8 @@ class JsonParser {
 					default:
 						if( comma ) invalidChar();
 						pos--;
-						arr.push(parseRec());
+						var elem = parseRec(i++);
+						arr.push(if (elem == DELETE) null else elem);
 						comma = true;
 					}
 				}
@@ -253,3 +269,10 @@ class JsonParser {
 		throw "Invalid number at position "+start+": " + str.substr(start, pos - start);
 	}
 }
+
+#if !js
+@:final
+private class Delete {
+	public function new() {}
+}
+#end

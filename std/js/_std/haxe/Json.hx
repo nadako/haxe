@@ -28,8 +28,8 @@ package haxe;
 class Json {
 
 	#if haxeJSON inline #end
-	public static function parse( text : String ) : Dynamic {
-		return haxe.format.JsonParser.parse(text);
+	public static function parse( text : String, ?reviver:Dynamic -> Dynamic -> Dynamic ) : Dynamic {
+		return haxe.format.JsonParser.parse(text, reviver);
 	}
 
 	#if haxeJSON inline #end

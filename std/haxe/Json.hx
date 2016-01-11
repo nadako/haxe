@@ -36,8 +36,8 @@ class Json {
 
 		If given `text` is not valid JSON, an exception will be thrown.
 	**/
-	public static inline function parse( text : String ) : Dynamic {
-		return haxe.format.JsonParser.parse(text);
+	public static inline function parse( text : String, ?reviver:Dynamic->Dynamic->Dynamic ) : Dynamic {
+		return haxe.format.JsonParser.parse(text, reviver);
 	}
 
 	/**
