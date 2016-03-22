@@ -995,6 +995,7 @@ and init ctx =
 	let classes = ref [([],"Std")] in
 try
 	let xml_out = ref None in
+	let json_out = ref None in
 	let swf_header = ref None in
 	let cmds = ref [] in
 	let config_macros = ref [] in
@@ -1092,6 +1093,10 @@ try
 			Parser.use_doc := true;
 			xml_out := Some file
 		),"<file> : generate XML types description");
+		("-json",Arg.String (fun file ->
+			Parser.use_doc := true;
+			json_out := Some file
+		),"<file> : generate JSON types description");
 		("-main",Arg.String (fun cl ->
 			if com.main_class <> None then raise (Arg.Bad "Multiple -main");
 			let cpath = make_type_path cl in
@@ -1546,6 +1551,12 @@ try
 			Common.log com ("Generating xml : " ^ file);
 			Common.mkdir_from_path file;
 			Genxml.generate com file);
+		(match !json_out with
+		| None -> ()
+		| Some file ->
+			Common.log com ("Generating json : " ^ file);
+			Common.mkdir_from_path file;
+			Genjson.generate com file);
 		if com.platform = Flash || com.platform = Cpp then List.iter (Codegen.fix_overrides com) com.types;
 		if Common.defined com Define.Dump then Codegen.dump_types com;
 		if Common.defined com Define.DumpDependencies then Codegen.dump_dependencies com;
