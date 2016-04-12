@@ -512,9 +512,16 @@ and gen_expr ctx e =
 			print ctx "($_=";
 			gen_value ctx x;
 			print ctx ",$bind($_,$_%s))" (if Meta.has Meta.SelfCall f.cf_meta then "" else (field f.cf_name)))
-	| TEnumParameter (x,_,i) ->
+	| TEnumParameter (x,f,i) ->
 		gen_value ctx x;
-		print ctx "[%i]" (i + 2)
+		if Common.raw_defined ctx.com "anon_enums" then
+			let name = (match f.ef_type with
+				| TFun(args,_) -> let n,_,_ = List.nth args i in n
+				| _ -> assert false)
+			in
+			print ctx "%s" (field name)
+		else
+			print ctx "[%i]" (i + 2)
 	| TField (x, (FInstance(_,_,f) | FStatic(_,f) | FAnon(f))) when Meta.has Meta.SelfCall f.cf_meta ->
 		gen_value ctx x;
 	| TField (x,f) ->
@@ -1143,23 +1150,34 @@ let generate_enum ctx e =
 	List.iter (fun n ->
 		let f = PMap.find n e.e_constrs in
 		print ctx "%s%s = " p (field f.ef_name);
-		(match f.ef_type with
-		| TFun (args,_) ->
-			let sargs = String.concat "," (List.map (fun (n,_,_) -> ident n) args) in
-			print ctx "function(%s) { var $x = [\"%s\",%d,%s]; $x.__enum__ = %s;" sargs f.ef_name f.ef_index sargs p;
-			if has_feature ctx "has_enum" then
-				spr ctx " $x.toString = $estr;";
-			spr ctx " return $x; }";
-			ctx.separator <- true;
-		| _ ->
-			print ctx "[\"%s\",%d]" f.ef_name f.ef_index;
-			newline ctx;
-			if has_feature ctx "has_enum" then begin
-				print ctx "%s%s.toString = $estr" p (field f.ef_name);
+
+		if Common.raw_defined ctx.com "anon_enums" then
+			(match f.ef_type with
+			| TFun (args,_) ->
+				let sargs = List.map (fun (n,_,_) -> ident n) args in
+				print ctx "function(%s) { return {$index:%d,%s}; }" (String.concat "," sargs) f.ef_index (String.concat "," (List.map (fun s -> Printf.sprintf "%s:%s" s s) sargs));
+				ctx.separator <- true;
+			| _ ->
+				print ctx "{$index:%d}" f.ef_index
+			)
+		else
+			(match f.ef_type with
+			| TFun (args,_) ->
+				let sargs = String.concat "," (List.map (fun (n,_,_) -> ident n) args) in
+				print ctx "function(%s) { var $x = [\"%s\",%d,%s]; $x.__enum__ = %s;" sargs f.ef_name f.ef_index sargs p;
+				if has_feature ctx "has_enum" then
+					spr ctx " $x.toString = $estr;";
+				spr ctx " return $x; }";
+				ctx.separator <- true;
+			| _ ->
+				print ctx "[\"%s\",%d]" f.ef_name f.ef_index;
 				newline ctx;
-			end;
-			print ctx "%s%s.__enum__ = %s" p (field f.ef_name) p;
-		);
+				if has_feature ctx "has_enum" then begin
+					print ctx "%s%s.toString = $estr" p (field f.ef_name);
+					newline ctx;
+				end;
+				print ctx "%s%s.__enum__ = %s" p (field f.ef_name) p;
+			);
 		newline ctx
 	) e.e_names;
 	if has_feature ctx "Type.allEnums" then begin

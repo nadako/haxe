@@ -217,7 +217,11 @@ enum ValueType {
 	}
 
 	public inline static function enumIndex( e : EnumValue ) : Int {
+		#if anon_enums
+		return untyped __js__("{0}.$index", e);
+		#else
 		return untyped e[1];
+		#end
 	}
 
 	public inline static function allEnums<T>( e : Enum<T> ) : Array<T> {
