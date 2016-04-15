@@ -222,12 +222,22 @@ let module_pass_1 ctx m tdecls loadp =
 	decls, List.rev tdecls
 
 let parse_file com file p =
-	let ch = (try open_in_bin file with _ -> error ("Could not open " ^ file) p) in
+	let use_stdin = (Common.raw_defined com "display_stdin") && (Common.unique_full_path file) = !Parser.resume_display.pfile in
+	let ch = if use_stdin then stdin else (try open_in_bin file with _ -> error ("Could not open " ^ file) p) in
 	let t = Common.timer "parsing" in
 	Lexer.init file true;
 	incr stats.s_files_parsed;
 	let data = (try Parser.parse com (Lexing.from_channel ch) with e -> close_in ch; t(); raise e) in
 	close_in ch;
+	t();
+	Common.log com ("Parsed " ^ file);
+	data
+
+let parse_file_with_data com contents file p =
+	let t = Common.timer "parsing" in
+	Lexer.init file true;
+	incr stats.s_files_parsed;
+	let data = (try Parser.parse com (Lexing.from_string contents) with e -> t(); raise e) in
 	t();
 	Common.log com ("Parsed " ^ file);
 	data
