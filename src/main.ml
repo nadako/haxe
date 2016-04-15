@@ -707,7 +707,7 @@ and wait_loop boot_com host port =
 
 		match is_display_file, !current_stdin with
 		| true, Some stdin when Common.raw_defined com2 "display_stdin" ->
-			Typeload.parse_file_with_data com2 stdin file p
+			Typeload.parse_from_function com2 (fun () -> Lexing.from_string stdin) file p
 		| _ ->
 			let sign = get_signature com2 in
 			let ftime = file_time ffile in
