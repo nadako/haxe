@@ -2844,6 +2844,7 @@ let init_module_type ctx context_init do_init (decl,p) =
 	let get_type name =
 		try List.find (fun t -> snd (t_infos t).mt_path = name) ctx.m.curmod.m_types with Not_found -> assert false
 	in
+	let is_display_file = is_display_file ctx p in
 	match decl with
 	| EImport (path,mode) ->
 		ctx.m.module_imports <- (path,mode) :: ctx.m.module_imports;
@@ -2960,14 +2961,37 @@ let init_module_type ctx context_init do_init (decl,p) =
 			))
 	| EUsing (t,_) ->
 		(* do the import first *)
+		let display_pos p t =
+			if is_display_file && Display.encloses_position !Parser.resume_display p then
+				match ctx.com.display with
+				| DMPosition -> Some (t_infos t).mt_pos
+				| _ -> None
+			else
+				None;
+		in
+		let check_display po = Option.may (fun p -> raise (Display.DisplayPosition [p])) po in
 		let types = (match t.tsub with
 			| None ->
-				let md = ctx.g.do_load_module ctx (t.tpackage,t.tname) p in
-				let types = List.filter (fun t -> not (t_infos t).mt_private) md.m_types in
+				let md_name = t.tname in
+				let md = ctx.g.do_load_module ctx (t.tpackage,md_name) p in
+				let first_display_pos = ref None in
+				let types = List.filter (fun t ->
+					let infos = t_infos t in
+					let load = not (infos.mt_private) in
+					if load then begin
+						let display_pos = display_pos p t in
+						if (snd infos.mt_path) = md_name then
+							check_display display_pos;
+						if !first_display_pos = None then first_display_pos := display_pos;
+					end;
+					load
+				) md.m_types in
+				check_display !first_display_pos;
 				ctx.m.module_types <- types @ ctx.m.module_types;
 				types
 			| Some _ ->
 				let t = load_type_def ctx p t in
+				check_display (display_pos p t);
 				ctx.m.module_types <- t :: ctx.m.module_types;
 				[t]
 		) in
@@ -3102,7 +3126,6 @@ let init_module_type ctx context_init do_init (decl,p) =
 		let index = ref 0 in
 		let is_flat = ref true in
 		let fields = ref PMap.empty in
-		let is_display_file = is_display_file ctx p in
 		List.iter (fun c ->
 			let p = c.ec_pos in
 			let params = ref [] in
