@@ -455,7 +455,7 @@ type import_mode =
 	| IAsName of string
 	| IAll
 
-type import = (string * pos) list * import_mode
+type import = placed_name list * import_mode
 
 type type_def =
 	| EClass of (class_flag, class_field list) definition
