@@ -168,12 +168,10 @@ let complete_fields com fields =
 	Buffer.add_string b "<list>\n";
 	List.iter (fun (n,t,k,d) ->
 		let s_kind = match k with
-			| Some k -> (match k with
-				| Display.FKVar -> "var"
-				| Display.FKMethod -> "method"
-				| Display.FKType -> "type"
-				| Display.FKPackage -> "package")
-			| None -> ""
+			| Display.FKVar -> "var"
+			| Display.FKMethod -> "method"
+			| Display.FKType -> "type"
+			| Display.FKPackage -> "package"
 		in
 		if details then
 			Buffer.add_string b (Printf.sprintf "<i n=\"%s\" k=\"%s\"><t>%s</t><d>%s</d></i>\n" n s_kind (htmlescape t) (htmlescape d))
@@ -1274,7 +1272,7 @@ try
 			| "classes" ->
 				pre_compilation := (fun() -> raise (Parser.TypePath (["."],None,true))) :: !pre_compilation;
 			| "keywords" ->
-				complete_fields com (Hashtbl.fold (fun k _ acc -> (k,"",None,"") :: acc) Lexer.keywords [])
+				complete_fields com (Hashtbl.fold (fun k _ acc -> (k,"",Display.FKVar,"") :: acc) Lexer.keywords [])
 			| "memory" ->
 				did_something := true;
 				(try display_memory ctx with e -> prerr_endline (Printexc.get_backtrace ()));
@@ -1724,81 +1722,113 @@ with
 	| Arg.Help msg ->
 		message ctx msg Ast.null_pos
 	| Display.DisplayFields fields ->
-		let ctx = print_context() in
-		let fields = List.map (fun (name,t,kind,doc) -> name, s_type ctx t, kind, (match doc with None -> "" | Some d -> d)) fields in
-		let fields = if !measure_times then begin
-			close_times();
-			let tot = ref 0. in
-			Hashtbl.iter (fun _ t -> tot := !tot +. t.total) Common.htimers;
-			let fields = ("@TOTAL", Printf.sprintf "%.3fs" (get_time() -. !start_time), None, "") :: fields in
-			if !tot > 0. then
-				Hashtbl.fold (fun _ t acc ->
-					("@TIME " ^ t.name, Printf.sprintf "%.3fs (%.0f%%)" t.total (t.total *. 100. /. !tot), None, "") :: acc
-				) Common.htimers fields
-			else fields
-		end else
-			fields
-		in
-		complete_fields com fields
-	| Display.DisplayType (t,p) ->
-		let ctx = print_context() in
-		let b = Buffer.create 0 in
-		if p = null_pos then
-			Buffer.add_string b "<type>\n"
+		if Common.defined com Define.DisplayJson then
+			raise (Completion (Display.print_fields_display fields))
 		else begin
-			let error_printer file line = sprintf "%s:%d:" (Common.unique_full_path file) line in
-			let epos = Lexer.get_error_pos error_printer p in
-			Buffer.add_string b ("<type p=\"" ^ (htmlescape epos) ^ "\">\n")
-		end;
-		Buffer.add_string b (htmlescape (s_type ctx t));
-		Buffer.add_string b "\n</type>\n";
-		raise (Completion (Buffer.contents b))
+			let ctx = print_context() in
+			let fields = List.map (fun (name,t,kind,doc) -> name, s_type ctx t, kind, (match doc with None -> "" | Some d -> d)) fields in
+			let fields = if !measure_times then begin
+				close_times();
+				let tot = ref 0. in
+				Hashtbl.iter (fun _ t -> tot := !tot +. t.total) Common.htimers;
+				let fields = ("@TOTAL", Printf.sprintf "%.3fs" (get_time() -. !start_time), Display.FKVar, "") :: fields in
+				if !tot > 0. then
+					Hashtbl.fold (fun _ t acc ->
+						("@TIME " ^ t.name, Printf.sprintf "%.3fs (%.0f%%)" t.total (t.total *. 100. /. !tot), Display.FKVar, "") :: acc
+					) Common.htimers fields
+				else fields
+			end else
+				fields
+			in
+			complete_fields com fields
+		end
+	| Display.DisplayType (t,p) ->
+		let result =
+			if Common.defined com Define.DisplayJson then
+				Display.print_type_display t p
+			else begin
+				let ctx = print_context() in
+				let b = Buffer.create 0 in
+				if p = null_pos then
+					Buffer.add_string b "<type>\n"
+				else begin
+					let error_printer file line = sprintf "%s:%d:" (Common.unique_full_path file) line in
+					let epos = Lexer.get_error_pos error_printer p in
+					Buffer.add_string b ("<type p=\"" ^ (htmlescape epos) ^ "\">\n")
+				end;
+				Buffer.add_string b (htmlescape (s_type ctx t));
+				Buffer.add_string b "\n</type>\n";
+				Buffer.contents b
+			end
+		in
+		raise (Completion result)
 	| Display.DisplaySignatures tl ->
-		let ctx = print_context() in
-		let b = Buffer.create 0 in
-		List.iter (fun (t,doc) ->
-			Buffer.add_string b "<type>\n";
-			Buffer.add_string b (htmlescape (s_type ctx (follow t)));
-			Buffer.add_string b "\n</type>\n";
-		) tl;
-		raise (Completion (Buffer.contents b))
+		let result =
+			if Common.defined com Define.DisplayJson then
+				Display.print_signatures_display tl
+			else begin
+				let ctx = print_context() in
+				let b = Buffer.create 0 in
+				List.iter (fun (t,doc) ->
+					Buffer.add_string b "<type>\n";
+					Buffer.add_string b (htmlescape (s_type ctx (follow t)));
+					Buffer.add_string b "\n</type>\n";
+				) tl;
+				Buffer.contents b
+			end
+		in
+		raise (Completion result)
 	| Display.DisplayPosition pl ->
-		let b = Buffer.create 0 in
-		let error_printer file line = sprintf "%s:%d:" (Common.unique_full_path file) line in
-		Buffer.add_string b "<list>\n";
-		List.iter (fun p ->
-			let epos = Lexer.get_error_pos error_printer p in
-			Buffer.add_string b "<pos>";
-			Buffer.add_string b epos;
-			Buffer.add_string b "</pos>\n";
-		) pl;
-		Buffer.add_string b "</list>";
-		raise (Completion (Buffer.contents b))
+		let result =
+			if Common.defined com Define.DisplayJson then
+				Display.print_position_display pl
+			else begin
+				let b = Buffer.create 0 in
+				let error_printer file line = sprintf "%s:%d:" (Common.unique_full_path file) line in
+				Buffer.add_string b "<list>\n";
+				List.iter (fun p ->
+					let epos = Lexer.get_error_pos error_printer p in
+					Buffer.add_string b "<pos>";
+					Buffer.add_string b epos;
+					Buffer.add_string b "</pos>\n";
+				) pl;
+				Buffer.add_string b "</list>";
+				Buffer.contents b
+			end
+		in
+		raise (Completion result)
 	| Display.DisplayToplevel il ->
-		let b = Buffer.create 0 in
-		Buffer.add_string b "<il>\n";
-		let ctx = print_context() in
-		let s_type t = htmlescape (s_type ctx t) in
-		let s_doc d = Option.map_default (fun s -> Printf.sprintf " d=\"%s\"" (htmlescape s)) "" d in
-		List.iter (fun id -> match id with
-			| IdentifierType.ITLocal v ->
-				Buffer.add_string b (Printf.sprintf "<i k=\"local\" t=\"%s\">%s</i>\n" (s_type v.v_type) v.v_name);
-			| IdentifierType.ITMember(c,cf) ->
-				Buffer.add_string b (Printf.sprintf "<i k=\"member\" t=\"%s\"%s>%s</i>\n" (s_type cf.cf_type) (s_doc cf.cf_doc) cf.cf_name);
-			| IdentifierType.ITStatic(c,cf) ->
-				Buffer.add_string b (Printf.sprintf "<i k=\"static\" t=\"%s\"%s>%s</i>\n" (s_type cf.cf_type) (s_doc cf.cf_doc) cf.cf_name);
-			| IdentifierType.ITEnum(en,ef) ->
-				Buffer.add_string b (Printf.sprintf "<i k=\"enum\" t=\"%s\"%s>%s</i>\n" (s_type ef.ef_type) (s_doc ef.ef_doc) ef.ef_name);
-			| IdentifierType.ITGlobal(mt,s,t) ->
-				Buffer.add_string b (Printf.sprintf "<i k=\"global\" p=\"%s\" t=\"%s\">%s</i>\n" (s_type_path (t_infos mt).mt_path) (s_type t) s);
-			| IdentifierType.ITType(mt) ->
-				let infos = t_infos mt in
-				Buffer.add_string b (Printf.sprintf "<i k=\"type\" p=\"%s\"%s>%s</i>\n" (s_type_path infos.mt_path) (s_doc infos.mt_doc) (snd infos.mt_path));
-			| IdentifierType.ITPackage s ->
-				Buffer.add_string b (Printf.sprintf "<i k=\"package\">%s</i>\n" s)
-		) il;
-		Buffer.add_string b "</il>";
-		raise (Completion (Buffer.contents b))
+		let result =
+			if Common.defined com Define.DisplayJson then
+				Display.print_toplevel_display il
+			else begin
+				let b = Buffer.create 0 in
+				Buffer.add_string b "<il>\n";
+				let ctx = print_context() in
+				let s_type t = htmlescape (s_type ctx t) in
+				let s_doc d = Option.map_default (fun s -> Printf.sprintf " d=\"%s\"" (htmlescape s)) "" d in
+				List.iter (fun id -> match id with
+					| IdentifierType.ITLocal v ->
+						Buffer.add_string b (Printf.sprintf "<i k=\"local\" t=\"%s\">%s</i>\n" (s_type v.v_type) v.v_name);
+					| IdentifierType.ITMember(c,cf) ->
+						Buffer.add_string b (Printf.sprintf "<i k=\"member\" t=\"%s\"%s>%s</i>\n" (s_type cf.cf_type) (s_doc cf.cf_doc) cf.cf_name);
+					| IdentifierType.ITStatic(c,cf) ->
+						Buffer.add_string b (Printf.sprintf "<i k=\"static\" t=\"%s\"%s>%s</i>\n" (s_type cf.cf_type) (s_doc cf.cf_doc) cf.cf_name);
+					| IdentifierType.ITEnum(en,ef) ->
+						Buffer.add_string b (Printf.sprintf "<i k=\"enum\" t=\"%s\"%s>%s</i>\n" (s_type ef.ef_type) (s_doc ef.ef_doc) ef.ef_name);
+					| IdentifierType.ITGlobal(mt,s,t) ->
+						Buffer.add_string b (Printf.sprintf "<i k=\"global\" p=\"%s\" t=\"%s\">%s</i>\n" (s_type_path (t_infos mt).mt_path) (s_type t) s);
+					| IdentifierType.ITType(mt) ->
+						let infos = t_infos mt in
+						Buffer.add_string b (Printf.sprintf "<i k=\"type\" p=\"%s\"%s>%s</i>\n" (s_type_path infos.mt_path) (s_doc infos.mt_doc) (snd infos.mt_path));
+					| IdentifierType.ITPackage s ->
+						Buffer.add_string b (Printf.sprintf "<i k=\"package\">%s</i>\n" s)
+				) il;
+				Buffer.add_string b "</il>";
+				Buffer.contents b
+			end
+		in
+		raise (Completion result)
 	| Parser.TypePath (p,c,is_import) ->
 		(match c with
 		| None ->
@@ -1806,10 +1836,13 @@ with
 			if packs = [] && classes = [] then
 				error ctx ("No classes found in " ^ String.concat "." p) Ast.null_pos
 			else
-				complete_fields com (
-					let convert k f = (f,"",Some k,"") in
-					(List.map (convert Display.FKPackage) packs) @ (List.map (convert Display.FKType) classes)
-				)
+				if Common.defined com Define.DisplayJson then
+					raise (Completion (Display.print_pack_completion_display p packs classes))
+				else
+					complete_fields com (
+						let convert k f = (f,"",k,"") in
+						(List.map (convert Display.FKPackage) packs) @ (List.map (convert Display.FKType) classes)
+					)
 		| Some (c,cur_package) ->
 			try
 				let sl_pack,s_module = match List.rev p with
@@ -1841,19 +1874,23 @@ with
 					end;
 					not tinfos.mt_private
 				) m.m_types in
-				let types = if c <> s_module then [] else List.map (fun t -> snd (t_path t),"",Some Display.FKType,"") public_types in
-				let ctx = print_context() in
-				let make_field_doc cf =
-					cf.cf_name,
-					s_type ctx cf.cf_type,
-					Some (match cf.cf_kind with Method _ -> Display.FKMethod | Var _ -> Display.FKVar),
-					(match cf.cf_doc with Some s -> s | None -> "")
-				in
-				let types = match !statics with
-					| None -> types
-					| Some cfl -> types @ (List.map make_field_doc (List.filter (fun cf -> cf.cf_public) cfl))
-				in
-				complete_fields com types
+				if Common.defined com Define.DisplayJson then
+					let types = if c <> s_module then [] else public_types in
+					raise (Completion (Display.print_module_completion_display types !statics))
+				else
+					let types = if c <> s_module then [] else List.map (fun t -> snd (t_path t),"",Display.FKType,"") public_types in
+					let ctx = print_context() in
+					let make_field_doc cf =
+						cf.cf_name,
+						s_type ctx cf.cf_type,
+						(match cf.cf_kind with Method _ -> Display.FKMethod | Var _ -> Display.FKVar),
+						(match cf.cf_doc with Some s -> s | None -> "")
+					in
+					let types = match !statics with
+						| None -> types
+						| Some cfl -> types @ (List.map make_field_doc (List.filter (fun cf -> cf.cf_public) cfl))
+					in
+					complete_fields com types
 			with Completion c ->
 				raise (Completion c)
 			| _ ->

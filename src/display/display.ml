@@ -16,7 +16,7 @@ exception DisplaySignatures of (t * documentation) list
 exception DisplayType of t * pos
 exception DisplayPosition of Ast.pos list
 exception DisplaySubExpression of Ast.expr
-exception DisplayFields of (string * t * display_field_kind option * documentation) list
+exception DisplayFields of (string * t * display_field_kind * documentation) list
 exception DisplayToplevel of IdentifierType.t list
 
 let is_display_file file =
@@ -169,9 +169,71 @@ module SymbolInformation = struct
 	}
 end
 
+open Json
+
+module TypeKind = struct
+	type t =
+		| TKClass
+		| TKInterface
+		| TKEnum
+		| TKTypedef
+		| TKAbstract
+		| TKFunction
+		| TKAnon
+		| TKDynamic
+		| TKExpr
+		| TKMono
+		| TKClassStatics
+		| TKAbstractStatics
+		| TKEnumStatics
+
+	let to_json t = JInt (match t with
+		| TKClass -> 1
+		| TKInterface -> 2
+		| TKEnum -> 3
+		| TKTypedef -> 4
+		| TKAbstract -> 5
+		| TKFunction -> 6
+		| TKAnon -> 7
+		| TKDynamic -> 8
+		| TKExpr -> 9
+		| TKMono -> 10
+		| TKClassStatics -> 11
+		| TKAbstractStatics -> 12
+		| TKEnumStatics -> 13)
+end
+
+module ToplevelCompletionKind = struct
+	type t =
+		| TCLocal
+		| TCMember
+		| TCStatic
+		| TCEnum
+		| TCGlobal
+		| TCType
+		| TCPackage
+
+	let to_json k = JInt (match k with
+		| TCLocal -> 1
+		| TCMember -> 2
+		| TCStatic -> 3
+		| TCEnum -> 4
+		| TCGlobal -> 5
+		| TCType -> 6
+		| TCPackage -> 7)
+end
+
+module FieldCompletionKind = struct
+	let to_json k = JInt (match k with
+		| FKVar -> 1
+		| FKMethod -> 2
+		| FKType -> 3
+		| FKPackage -> 4)
+end
+
 open SymbolKind
 open SymbolInformation
-open Json
+open TypeKind
 
 let pos_to_json_range p =
 	if p.pmin = -1 then
@@ -183,6 +245,255 @@ let pos_to_json_range p =
 			("start", to_json l1 p1);
 			("end", to_json l2 p2);
 		]
+
+let pos_to_json p =
+	match pos_to_json_range p with
+	| JNull -> JNull
+	| JObject fl -> JObject (("file", JString p.pfile) :: fl)
+	| _ -> assert false
+
+let rec type_to_json ctx t =
+	let add_params fl tl =
+		match tl with
+		| [] -> fl
+		| _ -> ("params", JArray (List.map (type_to_json ctx) tl)) :: fl
+	in
+	let add_opt fl opt =
+		if opt then ("opt", JBool true) :: fl else fl
+	in
+	let anon_to_json a =
+		let fl = match !(a.a_status) with
+			| Statics c ->
+				[
+					("kind", TypeKind.to_json TKClassStatics);
+					("path", type_path_to_json c.cl_path);
+				]
+			| EnumStatics e ->
+				[
+					("kind", TypeKind.to_json TKEnumStatics);
+					("path", type_path_to_json e.e_path);
+				]
+			| AbstractStatics a ->
+				[
+					("kind", TypeKind.to_json TKAbstractStatics);
+					("path", type_path_to_json a.a_path);
+				]
+			| _ ->
+				let fl = [
+					("kind", TypeKind.to_json TKAnon);
+					("fields", JArray (PMap.fold (fun f acc ->
+						(JObject (add_opt [
+							("name", JString f.cf_name);
+							("type", type_to_json ctx f.cf_type)
+						] (Meta.has Meta.Optional f.cf_meta))
+						) :: acc;
+					) a.a_fields []));
+				] in
+				if not (is_closed a) then ("open", JBool true) :: fl else fl
+		in
+		JObject fl
+	in
+	match t with
+	| TMono r ->
+		(match !r with
+		| None ->
+			let idx = (try List.assq t (!ctx) with Not_found -> let n = List.length !ctx in ctx := (t,n) :: !ctx; n) in
+			JObject [("kind", TypeKind.to_json TKMono); ("index", JInt idx)]
+		| Some t ->
+			type_to_json ctx t)
+	| TEnum (e,tl) ->
+		JObject (add_params [
+			("kind", TypeKind.to_json TKEnum);
+			("path", type_path_to_json e.e_path);
+		] tl)
+	| TInst (c,tl) ->
+		(match c.cl_kind with
+		| KExpr e ->
+			JObject [
+				("kind", TypeKind.to_json TKExpr);
+				("expr", JString (Ast.s_expr e));
+			]
+		| _ ->
+			JObject (add_params [
+				("kind", TypeKind.to_json (if c.cl_interface then TKInterface else TKClass));
+				("path", type_path_to_json c.cl_path);
+			] tl))
+	| TType (td,tl) ->
+		(match follow t with
+		| TAnon a when (match !(a.a_status) with Statics _ | EnumStatics _ | AbstractStatics _ -> true | _ -> false) ->
+			anon_to_json a
+		| _ ->
+			JObject (add_params [
+				("kind", TypeKind.to_json TKTypedef);
+				("path", type_path_to_json td.t_path);
+			] tl))
+	| TAbstract (a,tl) ->
+		JObject (add_params [
+			("kind", TypeKind.to_json TKAbstract);
+			("path", type_path_to_json a.a_path);
+		] tl)
+	| TFun (l,t) ->
+		JObject [
+			("kind", TypeKind.to_json TKFunction);
+			("args", JArray (List.map (fun (name,opt,t) ->
+				JObject (add_opt [
+					("name", JString name);
+					("type", type_to_json ctx t);
+				] opt)
+			) l));
+			("ret", type_to_json ctx t)
+		]
+	| TAnon a ->
+		anon_to_json a
+	| TDynamic t2 ->
+		JObject (add_params [
+			("kind", TypeKind.to_json TKDynamic);
+		] (if t == t2 then [] else [t2]))
+	| TLazy f ->
+		type_to_json ctx (!f())
+
+and type_path_to_json (p,n) =
+	let fl = [("name", JString n)] in
+	JObject (if p <> [] then
+		("pack", JArray (List.map (fun n -> JString n) p)) :: fl
+	else
+		fl)
+
+open IdentifierType
+let print_toplevel_display il =
+	let ctx = print_context() in
+	let b = Buffer.create 0 in
+	let add_doc fl d = Option.map_default (fun s -> ("doc", JString s) :: fl) fl d in
+	let arr = JArray (List.map (fun t ->
+		let fl = match t with
+			| ITLocal v ->
+				[
+					("kind", ToplevelCompletionKind.to_json ToplevelCompletionKind.TCLocal);
+					("name", JString v.v_name);
+					("type", type_to_json ctx v.v_type);
+				]
+			| ITMember (c,cf) ->
+				add_doc [
+					("kind", ToplevelCompletionKind.to_json ToplevelCompletionKind.TCMember);
+					("name", JString cf.cf_name);
+					("type", type_to_json ctx cf.cf_type);
+				] cf.cf_doc
+			| ITStatic (c,cf) ->
+				add_doc [
+					("kind", ToplevelCompletionKind.to_json ToplevelCompletionKind.TCStatic);
+					("name", JString cf.cf_name);
+					("type", type_to_json ctx cf.cf_type);
+				] cf.cf_doc
+			| ITEnum (e,ef) ->
+				add_doc [
+					("kind", ToplevelCompletionKind.to_json ToplevelCompletionKind.TCEnum);
+					("name", JString ef.ef_name);
+					("type", type_to_json ctx ef.ef_type);
+				] ef.ef_doc
+			| ITGlobal (mt,n,t) ->
+				[
+					("kind", ToplevelCompletionKind.to_json ToplevelCompletionKind.TCGlobal);
+					("name", JString n);
+					("type", type_to_json ctx t);
+					("parent", type_path_to_json ((t_infos mt).mt_path));
+				]
+			| ITType mt ->
+				let infos = t_infos mt in
+				add_doc [
+					("kind", ToplevelCompletionKind.to_json ToplevelCompletionKind.TCType);
+					("path", type_path_to_json infos.mt_path);
+				] infos.mt_doc
+			| ITPackage n ->
+				[
+					("kind", ToplevelCompletionKind.to_json ToplevelCompletionKind.TCPackage);
+					("name", JString n);
+				]
+		in
+		JObject fl
+	) il) in
+	write_json (Buffer.add_string b) arr;
+	Buffer.contents b
+
+let print_fields_display fields =
+	let ctx = print_context() in
+	let b = Buffer.create 0 in
+	let arr = JArray (List.map (fun (n,t,k,d) ->
+		let fl = [
+			("name", JString n);
+			("kind", FieldCompletionKind.to_json k);
+			("type", type_to_json ctx t);
+		] in
+		let fl = Option.map_default (fun s -> ("doc", JString s) :: fl) fl d in
+		JObject fl
+	) fields) in
+	write_json (Buffer.add_string b) arr;
+	Buffer.contents b
+
+let print_pack_completion_display prefix packs types =
+	let b = Buffer.create 0 in
+	let convert k n =
+		JObject [
+			("name", JString n);
+			("kind", FieldCompletionKind.to_json k);
+			("path", JString (String.concat "." (prefix @ [n])));
+		]
+	in
+	let items = (List.map (convert FKPackage) packs) @ (List.map (convert FKType) types) in
+	write_json (Buffer.add_string b) (JArray items);
+	Buffer.contents b
+
+let print_module_completion_display types statics =
+	let ctx = print_context() in
+	let b = Buffer.create 0 in
+	let j_type t =
+		JObject [
+			("name", JString (snd (t_path t)));
+			("kind", FieldCompletionKind.to_json FKType);
+		]
+	in
+	let j_static cf =
+		JObject [
+			("name", JString cf.cf_name);
+			("kind", FieldCompletionKind.to_json (match cf.cf_kind with Method _ -> FKMethod | Var _ -> FKVar));
+			("type", type_to_json ctx cf.cf_type);
+		]
+	in
+	let items = List.map j_type types in
+	let items = Option.map_default (fun statics -> items @ (List.map j_static statics)) items statics in
+	write_json (Buffer.add_string b) (JArray items);
+	Buffer.contents b
+
+let print_type_display t p =
+	let ctx = print_context() in
+	let b = Buffer.create 0 in
+	(* TODO: add kind (field,local,arg,etc) *)
+	let obj = JObject [
+		("range", pos_to_json_range p);
+		("type", type_to_json ctx t);
+	] in
+	write_json (Buffer.add_string b) obj;
+	Buffer.contents b
+
+let print_signatures_display tl =
+	let ctx = print_context() in
+	let b = Buffer.create 0 in
+	let arr = JArray (List.map (fun (t,doc) ->
+		let obj = type_to_json ctx t in (* TODO: we only need args and ret here *)
+		match doc with
+		| None -> obj
+		| Some s ->
+			(match obj with
+			| JObject fl -> JObject (("doc", JString s) :: fl)
+			| _ -> assert false)
+	) tl) in
+	write_json (Buffer.add_string b) arr;
+	Buffer.contents b
+
+let print_position_display pl =
+	let b = Buffer.create 0 in
+	let arr = JArray (List.map (fun p -> pos_to_json {p with pfile = Common.unique_full_path p.pfile}) pl) in
+	write_json (Buffer.add_string b) arr;
+	Buffer.contents b
 
 let print_module_symbols (pack,decls) =
 	let l = DynArray.create() in

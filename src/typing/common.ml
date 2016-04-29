@@ -237,6 +237,7 @@ module Define = struct
 		| DceDebug
 		| Debug
 		| Display
+		| DisplayJson
 		| DisplayStdin
 		| DllExport
 		| DllImport
@@ -328,6 +329,7 @@ module Define = struct
 		| DceDebug -> ("dce_debug","Show DCE log")
 		| Debug -> ("debug","Activated when compiling with -debug")
 		| Display -> ("display","Activated during completion")
+		| DisplayJson -> ("display_json","Output --display information in JSON format")
 		| DisplayStdin -> ("display_stdin","Read the contents of a file specified in --display from standard input")
 		| DllExport -> ("dll_export", "GenCPP experimental linking")
 		| DllImport -> ("dll_import", "GenCPP experimental linking")

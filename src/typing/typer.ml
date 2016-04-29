@@ -3782,7 +3782,7 @@ and handle_display ctx e_ast iscall with_type =
 		let tl = List.filter (fun t -> path <> (t_infos t).mt_path && not (t_infos t).mt_private) m.m_types in
 		let tl = List.map (fun mt ->
 			let infos = t_infos mt in
-			(snd infos.mt_path),type_of_module_type mt,Some Display.FKType,infos.mt_doc
+			(snd infos.mt_path),type_of_module_type mt,Display.FKType,infos.mt_doc
 		) tl in
 		tl
 	in
@@ -4071,7 +4071,7 @@ and handle_display ctx e_ast iscall with_type =
 			let get_field acc f =
 				List.fold_left (fun acc f ->
 					let kind = match f.cf_kind with Method _ -> Display.FKMethod | Var _ -> Display.FKVar in
-					if f.cf_public then (f.cf_name,f.cf_type,Some kind,f.cf_doc) :: acc else acc
+					if f.cf_public then (f.cf_name,f.cf_type,kind,f.cf_doc) :: acc else acc
 				) acc (f :: f.cf_overloads)
 			in
 			let fields = List.fold_left get_field [] fields in
