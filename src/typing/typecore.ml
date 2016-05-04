@@ -95,7 +95,6 @@ and typer = {
 	mutable this_stack : texpr list;
 	mutable with_type_stack : with_type list;
 	mutable call_argument_stack : Ast.expr list list;
-	mutable cached_macros : (path * string,((string * bool * t) list * t * tclass * Type.tclass_field)) Hashtbl.t;
 	(* variable *)
 	mutable pass : typer_pass;
 	(* per-module *)

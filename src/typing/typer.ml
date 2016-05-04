@@ -4968,7 +4968,7 @@ let load_macro ctx display cpath f p =
 		| name :: pack when name.[0] >= 'A' && name.[0] <= 'Z' -> (List.rev pack,name), Some (snd cpath)
 		| _ -> cpath, None
 	) in
-	let meth = try Hashtbl.find mctx.cached_macros (cpath,f) with Not_found ->
+	let meth = try Hashtbl.find mctx.com.cached_macros (cpath,f) with Not_found ->
 		(* Temporarily enter display mode while typing the macro. *)
 		if display then mctx.com.display <- ctx.com.display;
 		let m = (try Hashtbl.find ctx.g.types_module cpath with Not_found -> cpath) in
@@ -4993,7 +4993,7 @@ let load_macro ctx display cpath f p =
 		let meth = (match follow meth.cf_type with TFun (args,ret) -> args,ret,cl,meth | _ -> error "Macro call should be a method" p) in
 		mctx.com.display <- DMNone;
 		if not ctx.in_macro then flush_macro_context mint ctx;
-		Hashtbl.add mctx.cached_macros (cpath,f) meth;
+		Hashtbl.add mctx.com.cached_macros (cpath,f) meth;
 		meth
 	in
 	t();
@@ -5258,7 +5258,6 @@ let rec create com =
 			wildcard_packages = [];
 			module_imports = [];
 		};
-		cached_macros = Hashtbl.create 0;
 		is_display_file = false;
 		meta = [];
 		this_stack = [];
