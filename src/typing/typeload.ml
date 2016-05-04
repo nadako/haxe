@@ -3406,6 +3406,7 @@ let type_types_into_module ctx m tdecls p =
 			wildcard_packages = [];
 			module_imports = [];
 		};
+		cached_macros = ctx.cached_macros;
 		is_display_file = (match ctx.com.display with DMNone -> false | _ -> Display.is_display_file m.m_extra.m_file);
 		meta = [];
 		this_stack = [];
