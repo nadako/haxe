@@ -172,7 +172,7 @@ enum ValueType {
 		case "object":
 			if( v == null )
 				return TNull;
-			var e = (cast v).__enum__;
+			var e = v.__enum__;
 			if( e != null )
 				return TEnum(e);
 			var c = js.Boot.getClass(v);

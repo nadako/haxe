@@ -1552,7 +1552,11 @@ and type_field ?(resume=false) ctx e i p mode =
 		(try
 			using_field ctx mode e i p
 		with Not_found ->
-			error "Field access on Dynamic is not supported" p)
+			if ctx.untyped then
+				AKExpr (mk (TField (e,FDynamic i)) TDynamic p)
+			else
+				error "Field access on Dynamic is not supported" p
+		)
 	| TAnon a ->
 		(try
 			let f = PMap.find i a.a_fields in
@@ -2840,6 +2844,8 @@ and type_access ctx e p mode =
 				TDynamic
 			| TAbstract(a,tl) when Meta.has Meta.ArrayAccess a.a_meta ->
 				loop (apply_params a.a_params tl a.a_this)
+			| TDynamic when not ctx.untyped ->
+				error "Array access is not supported on Dynamic" p
 			| _ ->
 				let pt = mk_mono() in
 				let t = ctx.t.tarray pt in

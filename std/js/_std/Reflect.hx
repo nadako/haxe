@@ -36,12 +36,12 @@
 
 	public static inline function getProperty( o : Dynamic, field : String ) : Dynamic untyped {
 		var tmp;
-		return if( o == null ) __define_feature__("Reflect.getProperty",null) else if( (cast o).__properties__ && (tmp=(cast o).__properties__["get_"+field]) ) o[tmp]() else o[field];
+		return if( o == null ) __define_feature__("Reflect.getProperty",null) else if( o.__properties__ && (tmp=o.__properties__["get_"+field]) ) o[tmp]() else o[field];
 	}
 
 	public static inline function setProperty( o : Dynamic, field : String, value : Dynamic ) : Void untyped {
 		var tmp;
-		if( (cast o).__properties__ && (tmp=(cast o).__properties__["set_"+field]) ) o[tmp](value) else o[field] = __define_feature__("Reflect.setProperty",value);
+		if( o.__properties__ && (tmp=o.__properties__["set_"+field]) ) o[tmp](value) else o[field] = __define_feature__("Reflect.setProperty",value);
 	}
 
 	public inline static function callMethod( o : Dynamic, func : haxe.Constraints.Function, args : Array<Dynamic> ) : Dynamic untyped {
@@ -72,18 +72,18 @@
 			return true;
 		if( !isFunction(f1) || !isFunction(f2) )
 			return false;
-		return (cast f1).scope == (cast f2).scope && (cast f1).method == (cast f2).method && (cast f1).method != null;
+		return untyped f1.scope == f2.scope && f1.method == f2.method && f1.method != null;
 	}
 
 	public static function isObject( v : Dynamic ) : Bool untyped {
 		if( v == null )
 			return false;
 		var t = __js__("typeof(v)");
-		return (t == "string" || (t == "object" && (cast v).__enum__ == null)) || (t == "function" && (js.Boot.isClass(v) || js.Boot.isEnum(v)) != null);
+		return (t == "string" || (t == "object" && v.__enum__ == null)) || (t == "function" && (js.Boot.isClass(v) || js.Boot.isEnum(v)) != null);
 	}
 
 	public static function isEnumValue( v : Dynamic ) : Bool {
-		return v != null && (cast v).__enum__ != null;
+		return v != null && untyped v.__enum__ != null;
 	}
 
 	public static function deleteField( o : Dynamic, field : String ) : Bool untyped {
