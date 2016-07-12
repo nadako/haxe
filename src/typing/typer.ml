@@ -4082,7 +4082,10 @@ and handle_display ctx e_ast iscall with_type =
 		let t = if iscall then
 			let rec loop t = match follow t with
 				| TFun _ -> t
-				| TAbstract(a,tl) when Meta.has Meta.Callable a.a_meta -> loop (Abstract.get_underlying_type a tl)
+				| TAbstract(a,tl) when Meta.has Meta.Callable a.a_meta ->
+					(match a.a_path with
+					| ["haxe"],"Function" -> TDynamic (* hack *)
+					| _ -> loop (Abstract.get_underlying_type a tl))
 				| _ -> TDynamic
 			in
 			loop e.etype
@@ -4350,7 +4353,11 @@ and build_call ctx acc el (with_type:with_type) p =
 					mk (TCall ({e with etype = tfunc},el)) r p
 			end
 		| TAbstract(a,tl) when Meta.has Meta.Callable a.a_meta ->
-			loop (Abstract.get_underlying_type a tl)
+			(match a.a_path with
+			| ["haxe"],"Function" ->
+				let el = List.map (fun e -> type_expr ctx e Value) el in
+				mk (TCall(e,el)) TDynamic p (* hack *)
+			| _ -> loop (Abstract.get_underlying_type a tl))
 		| TMono _ ->
 			let t = mk_mono() in
 			let el = List.map (fun e -> type_expr ctx e Value) el in
