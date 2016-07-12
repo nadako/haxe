@@ -4371,9 +4371,7 @@ and build_call ctx acc el (with_type:with_type) p =
 			mk (TCall (e,el)) t p
 		| t ->
 			let el = List.map (fun e -> type_expr ctx e Value) el in
-			let t = if t == TDynamic then
-				TDynamic
-			else if ctx.untyped then
+			let t = if ctx.untyped then
 				mk_mono()
 			else
 				error (s_type (print_context()) e.etype ^ " cannot be called") e.epos
