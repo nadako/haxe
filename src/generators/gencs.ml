@@ -2721,7 +2721,6 @@ let configure gen =
 					| _ -> ()
 
 				) all_fields;
-			 cl.cl_dynamic <- Option.map run_follow_gen cl.cl_dynamic;
 			 cl.cl_array_access <- Option.map run_follow_gen cl.cl_array_access;
 			 cl.cl_init <- Option.map type_map cl.cl_init;
 			 cl.cl_super <- Option.map super_map cl.cl_super;

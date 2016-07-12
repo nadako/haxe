@@ -1971,13 +1971,6 @@ let generate_static_field_assign ctx path f =
 				print ctx "%s::$%s = " (s_path ctx path false p) (s_ident f.cf_name);
 				gen_value ctx e)
 
-let rec super_has_dynamic c =
-	match c.cl_super with
-	| None -> false
-	| Some (csup, _) -> (match csup.cl_dynamic with
-		| Some _ -> true
-		| _ -> super_has_dynamic csup)
-
 let generate_inline_method ctx c m =
 	(match ctx.inline_methods with
 	| [] -> ()
@@ -2065,17 +2058,10 @@ let generate_class ctx c =
 
 	List.iter (generate_field ctx false) c.cl_ordered_fields;
 
-	(match c.cl_dynamic with
-		| Some _ when not c.cl_interface && not (super_has_dynamic c) ->
-			newline ctx;
-			spr ctx "public $__dynamics = array();\n\tpublic function __get($n) {\n\t\tif(isset($this->__dynamics[$n]))\n\t\t\treturn $this->__dynamics[$n];\n\t}\n\tpublic function __set($n, $v) {\n\t\t$this->__dynamics[$n] = $v;\n\t}\n\tpublic function __call($n, $a) {\n\t\tif(isset($this->__dynamics[$n]) && is_callable($this->__dynamics[$n]))\n\t\t\treturn call_user_func_array($this->__dynamics[$n], $a);\n\t\tif('toString' == $n)\n\t\t\treturn $this->__toString();\n\t\tthrow new HException(\"Unable to call <\".$n.\">\");\n\t}"
-		| Some _
-		| _ ->
-			if List.length ctx.dynamic_methods > 0 then begin
-				newline ctx;
-				spr ctx "public function __call($m, $a) {\n\t\tif(isset($this->$m) && is_callable($this->$m))\n\t\t\treturn call_user_func_array($this->$m, $a);\n\t\telse if(isset($this->__dynamics[$m]) && is_callable($this->__dynamics[$m]))\n\t\t\treturn call_user_func_array($this->__dynamics[$m], $a);\n\t\telse if('toString' == $m)\n\t\t\treturn $this->__toString();\n\t\telse\n\t\t\tthrow new HException('Unable to call <'.$m.'>');\n\t}";
-			end;
-	);
+	if List.length ctx.dynamic_methods > 0 then begin
+		newline ctx;
+		spr ctx "public function __call($m, $a) {\n\t\tif(isset($this->$m) && is_callable($this->$m))\n\t\t\treturn call_user_func_array($this->$m, $a);\n\t\telse if(isset($this->__dynamics[$m]) && is_callable($this->__dynamics[$m]))\n\t\t\treturn call_user_func_array($this->__dynamics[$m], $a);\n\t\telse if('toString' == $m)\n\t\t\treturn $this->__toString();\n\t\telse\n\t\t\tthrow new HException('Unable to call <'.$m.'>');\n\t}";
+	end;
 
 	List.iter (generate_field ctx true) c.cl_ordered_statics;
 

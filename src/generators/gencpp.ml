@@ -958,17 +958,6 @@ let rec is_dynamic_accessor name acc field class_def =
 ;;
 
 
-(* Check to see if we are the first object in the parent tree to implement a dynamic interface *)
-let implement_dynamic_here class_def =
-   let implements_dynamic c = match c.cl_dynamic with None -> false | _ -> true  in
-   let rec super_implements_dynamic c = match c.cl_super with
-      | None -> false
-      | Some (csup, _) -> if (implements_dynamic csup) then true else
-            super_implements_dynamic csup;
-   in
-   ( (implements_dynamic class_def) && (not (super_implements_dynamic class_def) ) );;
-
-
 let gen_hash32 seed str =
    let h = ref (Int32.of_int seed) in
    let cycle = Int32.of_int 223 in
@@ -1912,7 +1901,7 @@ let cpp_cast_variant_type_of t = match t with
    | TCppScalarArray _
    | TCppDynamicArray
    | TCppClass
-   | TCppEnum _ 
+   | TCppEnum _
    | TCppInst _ -> t
    | _ -> cpp_variant_type_of t;
 ;;
@@ -3304,7 +3293,7 @@ let gen_cpp_ast_expression_tree ctx class_name func_name function_args injection
          | TCppClass
          | TCppEnum _
          | TCppInst _ -> out (".StaticCast< " ^ (tcpp_to_string valueType ) ^ " >()")
-         | _ ->() 
+         | _ ->()
          )
 
       | CppIntSwitch(condition, cases, defVal) ->
@@ -3681,7 +3670,7 @@ let all_virtual_functions clazz =
 let rec unreflective_type t =
     match follow t with
        | TInst (klass,_) ->  Meta.has Meta.Unreflective klass.cl_meta
-       | TFun (args,ret) -> 
+       | TFun (args,ret) ->
            List.fold_left (fun result (_,_,t) -> result || (unreflective_type t)) (unreflective_type ret) args;
        | _ -> false
 ;;
@@ -3710,7 +3699,7 @@ let native_field_name_remap is_static field =
    if not is_static then
       remap_name
    else begin
-      let nativeImpl = get_meta_string field.cf_meta Meta.Native in 
+      let nativeImpl = get_meta_string field.cf_meta Meta.Native in
       if nativeImpl<>"" then begin
          let r = Str.regexp "^[a-zA-Z_0-9]+$" in
             if Str.string_match r remap_name 0 then
@@ -3743,7 +3732,7 @@ let gen_field ctx class_def class_name ptr_name dot_name is_static is_interface 
 
       if (not (is_dynamic_haxe_method field)) then begin
          (* The actual function definition *)
-         let nativeImpl = get_meta_string field.cf_meta Meta.Native in 
+         let nativeImpl = get_meta_string field.cf_meta Meta.Native in
          let remap_name = native_field_name_remap is_static field in
          output (if is_void then "void" else return_type );
          output (" " ^ class_name ^ "::" ^ remap_name ^ "(" );
@@ -4565,15 +4554,10 @@ let list_iteri func in_list =
 ;;
 
 let has_new_gc_references ctx class_def =
-   match class_def.cl_dynamic with
-   | Some _ -> true
-   | _ -> (
       let is_gc_reference field =
-      (should_implement_field field) && (is_data_member field) && not (ctx_cant_be_null ctx field.cf_type)
+            (should_implement_field field) && (is_data_member field) && not (ctx_cant_be_null ctx field.cf_type)
       in
       List.exists is_gc_reference class_def.cl_ordered_fields
-      )
-;;
 
 
 let rec has_gc_references ctx class_def =
@@ -4628,11 +4612,9 @@ let is_writable class_def field =
 let statics_except_meta class_def = (List.filter (fun static -> static.cf_name <> "__meta__" && static.cf_name <> "__rtti") class_def.cl_ordered_statics);;
 
 let has_set_member_field class_def =
-   implement_dynamic_here class_def || (
       let reflect_fields = List.filter (reflective class_def) (class_def.cl_ordered_fields) in
       let reflect_writable = List.filter (is_writable class_def) reflect_fields in
       List.exists variable_field reflect_writable
-   )
 ;;
 
 
@@ -4644,17 +4626,13 @@ let has_set_static_field class_def =
 
 
 let has_get_fields class_def =
-   implement_dynamic_here class_def || (
       let is_data_field field = (match follow field.cf_type with | TFun _ -> false | _ -> true) in
       List.exists is_data_field class_def.cl_ordered_fields
-   )
 ;;
 
 let has_get_member_field class_def =
-   implement_dynamic_here class_def || (
       let reflect_fields = List.filter (reflective class_def) (class_def.cl_ordered_fields) in
       List.exists (is_readable class_def) reflect_fields
-   )
 ;;
 
 
@@ -4791,7 +4769,6 @@ let generate_class_files baseCtx super_deps constructor_deps class_def inScripta
    let scriptable = inScriptable && not class_def.cl_private in
 
    (* Config *)
-   let implement_dynamic = implement_dynamic_here class_def in
    let override_iteration = (not nativeGen) && (has_new_gc_references baseCtx class_def) in
    let dynamic_interface_closures =  (Common.defined baseCtx.ctx_common Define.DynamicInterfaceClosures) in
 
@@ -5020,8 +4997,6 @@ let generate_class_files baseCtx super_deps constructor_deps class_def inScripta
    (* Initialise non-static variables *)
    if ( (not class_def.cl_interface) && (not nativeGen) ) then begin
       output_cpp (class_name ^ "::" ^ class_name ^  "()\n{\n");
-      if (implement_dynamic) then
-         output_cpp "\tHX_INIT_IMPLEMENT_DYNAMIC;\n";
       List.iter
          (fun field -> let remap_name = keyword_remap field.cf_name in
             match field.cf_expr with
@@ -5054,8 +5029,6 @@ let generate_class_files baseCtx super_deps constructor_deps class_def inScripta
          (* MARK function - explicitly mark all child pointers *)
          output_cpp ("void " ^ class_name ^ "::__Mark(HX_MARK_PARAMS)\n{\n");
          output_cpp ("\tHX_MARK_BEGIN_CLASS(" ^ smart_class_name ^ ");\n");
-         if (implement_dynamic) then
-            output_cpp "\tHX_MARK_DYNAMIC;\n";
          List.iter (dump_field_iterator "HX_MARK_MEMBER_NAME") implemented_instance_fields;
          (match super_needs_iteration with
          | "" -> ()
@@ -5065,8 +5038,6 @@ let generate_class_files baseCtx super_deps constructor_deps class_def inScripta
 
          (* Visit function - explicitly visit all child pointers *)
          output_cpp ("void " ^ class_name ^ "::__Visit(HX_VISIT_PARAMS)\n{\n");
-         if (implement_dynamic) then
-            output_cpp "\tHX_VISIT_DYNAMIC;\n";
          List.iter (dump_field_iterator "HX_VISIT_MEMBER_NAME") implemented_instance_fields;
          (match super_needs_iteration with
          | "" -> ()
@@ -5117,8 +5088,6 @@ let generate_class_files baseCtx super_deps constructor_deps class_def inScripta
             ) ) )
          in
          dump_quick_field_test (get_field_dat reflect_member_readable);
-         if (implement_dynamic) then
-            output_cpp "\tHX_CHECK_DYNAMIC_GET_FIELD(inName);\n";
          output_cpp ("\treturn super::__Field(inName,inCallProp);\n}\n\n");
 
       end;
@@ -5159,12 +5128,7 @@ let generate_class_files baseCtx super_deps constructor_deps class_def inScripta
          ) in
 
          dump_quick_field_test (set_field_dat reflect_write_member_variables);
-         if (implement_dynamic) then begin
-            output_cpp ("\ttry { return super::__SetField(inName,inValue,inCallProp); }\n");
-            output_cpp ("\tcatch(Dynamic e) { HX_DYNAMIC_SET_FIELD(inName,inValue); }\n");
-            output_cpp "\treturn inValue;\n}\n\n";
-         end else
-            output_cpp ("\treturn super::__SetField(inName,inValue,inCallProp);\n}\n\n");
+         output_cpp ("\treturn super::__SetField(inName,inValue,inCallProp);\n}\n\n");
       end;
 
       if (has_set_static_field class_def) then begin
@@ -5198,8 +5162,6 @@ let generate_class_files baseCtx super_deps constructor_deps class_def inScripta
 
          output_cpp ("void " ^ class_name ^ "::__GetFields(Array< ::String> &outFields)\n{\n");
          List.iter append_field (List.filter is_data_field class_def.cl_ordered_fields);
-         if (implement_dynamic) then
-            output_cpp "\tHX_APPEND_DYNAMIC_FIELDS(outFields);\n";
          output_cpp "\tsuper::__GetFields(outFields);\n";
          output_cpp "};\n\n";
       end;
@@ -5377,8 +5339,7 @@ let generate_class_files baseCtx super_deps constructor_deps class_def inScripta
             output_cpp ("   HX_DEFINE_SCRIPTABLE_INTERFACE\n")
          else begin
             output_cpp ("   HX_DEFINE_SCRIPTABLE(HX_ARR_LIST" ^ (string_of_int (List.length constructor_var_list) ) ^ ")\n");
-            if (not implement_dynamic) then
-               output_cpp "\tHX_DEFINE_SCRIPTABLE_DYNAMIC;\n";
+            output_cpp "\tHX_DEFINE_SCRIPTABLE_DYNAMIC;\n";
          end;
       end;
 
@@ -5611,8 +5572,6 @@ let generate_class_files baseCtx super_deps constructor_deps class_def inScripta
       if (has_get_fields class_def) then
          output_h ("\t\tvoid __GetFields(Array< ::String> &outFields);\n");
 
-      if (implement_dynamic) then
-         output_h ("\t\tHX_DECLARE_IMPLEMENT_DYNAMIC;\n");
       output_h ("\t\tstatic void __register();\n");
       if (override_iteration) then begin
          output_h ("\t\tvoid __Mark(HX_MARK_PARAMS);\n");
@@ -5996,7 +5955,6 @@ type cppia_op =
 	| IaEnumI
 	| IaSwitch
 	| IaTry
-	| IaImplDynamic
    | IaConstInt
    | IaConstFloat
    | IaConstString
@@ -6080,7 +6038,6 @@ let cppia_op_info = function
 	| IaEnumI -> ("ENUMI", 53)
 	| IaSwitch -> ("SWITCH", 54)
 	| IaTry -> ("TRY", 55)
-	| IaImplDynamic -> ("IMPLDYNAMIC", 56)
    | IaConstInt -> ("i", 57)
    | IaConstFloat -> ("f", 58)
    | IaConstString -> ("s", 59)
@@ -6321,7 +6278,6 @@ class script_writer ctx filename asciiOut =
       match varExpr with
       | Some expression -> this#gen_expression expression
       | _ -> ()
-   method implDynamic = this#writeOpLine IaImplDynamic;
    method writeVar v =
       this#ident v.v_name;
       this#wint v.v_id;
@@ -6672,7 +6628,7 @@ let generate_script_class common_ctx script class_def =
    script#write ((string_of_int ( (List.length ordered_fields) +
                                  (List.length ordered_statics) +
                                  (match class_def.cl_constructor with Some _ -> 1 | _ -> 0 ) +
-                                 (if (implement_dynamic_here class_def) then 1 else 0) +
+                                 0 +
                                  (match class_def.cl_init with Some _ -> 1 | _ -> 0 ) ) )
                                  ^ "\n");
 
@@ -6713,8 +6669,6 @@ let generate_script_class common_ctx script class_def =
 
    List.iter (generate_field false) ordered_fields;
    List.iter (generate_field true) ordered_statics;
-   if (implement_dynamic_here class_def) then
-      script#implDynamic;
    script#write "\n";
 ;;
 

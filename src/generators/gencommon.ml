@@ -1365,23 +1365,10 @@ let field_access gen (t:t) (field:string) : (tfield_access) =
 		| TInst(cl, params) ->
 			let orig_cl = cl in
 			let orig_params = params in
-			let rec not_found cl params =
-				match cl.cl_dynamic with
-					| Some t ->
-						let t = apply_params cl.cl_params params t in
-						FDynamicField t
-					| None ->
-						match cl.cl_super with
-							| None -> FNotFound
-							| Some (super,p) ->  not_found super p
-			in
 
 			let not_found () =
-				try
-					let cf = PMap.find field gen.gbase_class_fields in
-					FClassField (orig_cl, orig_params, gen.gclasses.cl_dyn, cf, false, cf.cf_type, cf.cf_type)
-				with
-					| Not_found -> not_found cl params
+				let cf = PMap.find field gen.gbase_class_fields in
+				FClassField (orig_cl, orig_params, gen.gclasses.cl_dyn, cf, false, cf.cf_type, cf.cf_type)
 			in
 
 			(* this is a hack for C#'s different generic types with same path *)
@@ -7480,12 +7467,6 @@ struct
 		cf.cf_expr <- Some({ eexpr = TFunction(fn); etype = fun_type; epos = pos });
 		cf
 
-	let rec is_first_dynamic cl =
-		match cl.cl_super with
-			| Some(cl,_) ->
-				if is_some cl.cl_dynamic then false else is_first_dynamic cl
-			| None -> true
-
 	let is_override cl = match cl.cl_super with
 		| Some (cl, _) when is_hxgen (TClassDecl cl) -> true
 		| _ -> false
@@ -7670,70 +7651,6 @@ struct
 		in
 		do_objdecl
 
-	let implement_dynamics ctx cl =
-		let pos = cl.cl_pos in
-		let is_override = is_override cl in
-		if is_some cl.cl_dynamic then begin
-			if is_first_dynamic cl then begin
-				(*
-					* add hx_hashes, hx_hashes_f, hx_dynamics, hx_dynamics_f to class
-					* implement hx_deleteField
-				*)
-				let gen = ctx.rcf_gen in
-				let basic = gen.gcon.basic in
-				let hasht = if ctx.rcf_optimize then basic.tint else basic.tstring in
-
-				let new_fields =
-				[
-					mk_class_field (gen.gmk_internal_name "hx" "hashes") (gen.gclasses.nativearray hasht) false pos (Var { v_read = AccNormal; v_write = AccNormal }) [];
-					mk_class_field (gen.gmk_internal_name "hx" "dynamics") (gen.gclasses.nativearray t_empty) false pos (Var { v_read = AccNormal; v_write = AccNormal }) [];
-					mk_class_field (gen.gmk_internal_name "hx" "hashes_f") (gen.gclasses.nativearray hasht) false pos (Var { v_read = AccNormal; v_write = AccNormal }) [];
-					mk_class_field (gen.gmk_internal_name "hx" "dynamics_f") (gen.gclasses.nativearray basic.tfloat) false pos (Var { v_read = AccNormal; v_write = AccNormal }) [];
-				] in
-
-				(if cl.cl_path <> (["haxe"; "lang"], "DynamicObject") then
-					List.iter (fun cf -> cf.cf_expr <- Some { eexpr = TCall(mk_local v_nativearray pos, []); etype = cf.cf_type; epos = cf.cf_pos }) new_fields
-				);
-
-				let delete = get_delete_field ctx cl true in
-
-				let new_fields = new_fields @ [
-					mk_class_field (gen.gmk_internal_name "hx" "length") (basic.tint) false pos (Var { v_read = AccNormal; v_write = AccNormal }) [];
-					mk_class_field (gen.gmk_internal_name "hx" "length_f") (basic.tint) false pos (Var { v_read = AccNormal; v_write = AccNormal }) [];
-					delete;
-				] in
-
-				List.iter (fun cf ->
-					cl.cl_fields <- PMap.add cf.cf_name cf cl.cl_fields
-				) new_fields;
-
-		(*
-				let rec last_ctor cl =
-					match cl.cl_constructor with
-						| None -> (match cl.cl_super with | None -> None | Some (cl,_) -> last_ctor cl)
-						| Some c -> Some c
-				in
-		*)
-				(*
-					in order for the next to work, we need to execute our script before InitFunction, so the expressions inside the variables are initialized by the constructor
-				*)
-				(*
-					Now we need to add their initialization.
-					This will consist of different parts:
-						Check if there are constructors. If not, create one and add initialization to it (calling super, ok)
-						If there are, add as first statement (or second if there is a super() call in the first)
-						If class has @:dynamicObject meta, also create another new() class with its parameters as constructor arguments
-				*)
-
-				cl.cl_ordered_fields <- cl.cl_ordered_fields @ new_fields;
-				if is_override then cl.cl_overrides <- delete :: cl.cl_overrides
-			end
-		end else if not is_override then begin
-			let delete = get_delete_field ctx cl false in
-			cl.cl_ordered_fields <- cl.cl_ordered_fields @ [delete];
-			cl.cl_fields <- PMap.add delete.cf_name delete cl.cl_fields
-		end
-
 	let implement_create_empty ctx cl =
 		let gen = ctx.rcf_gen in
 		let basic = gen.gcon.basic in
@@ -7917,14 +7834,7 @@ struct
 			) cfs
 		in
 
-		if is_some cl.cl_dynamic then begin
-			(* let abstract_dyn_lookup_implementation ctx this hash_local may_value is_float pos = *)
-			(* callback : is_float fields_args switch_var throw_errors_option is_check_option value_option : texpr list *)
-			if is_first_dynamic cl then
-				create_cfs true (fun is_float fields_args switch_var _ _ value_opt ->
-					abstract_dyn_lookup_implementation ctx this (mk_local switch_var pos) (Option.map (fun v -> mk_local v pos) value_opt) is_float pos
-				)
-		end else if not is_override then begin
+	 if not is_override then begin
 			create_cfs false (fun is_float fields_args switch_var _ _ value_opt ->
 				match value_opt with
 					| None -> (* is not set *)
@@ -8230,15 +8140,6 @@ struct
 		let gen = ctx.rcf_gen in
 		let basic = gen.gcon.basic in
 		let pos = cl.cl_pos in
-	(*
-		let rec has_no_dynamic cl =
-			if is_some cl.cl_dynamic then
-				false
-			else match cl.cl_super with
-				| None -> true
-				| Some(cl,_) -> has_no_dynamic cl
-		in
-	*)
 		(* Type.getClassFields() *)
 		if ctx.rcf_handle_statics then begin
 			let name = gen.gmk_internal_name "hx" "classFields" in
@@ -8320,12 +8221,7 @@ struct
 			(*
 				if it is first_dynamic, then we need to enumerate the dynamic fields
 			*)
-			let if_not_inst = if is_some cl.cl_dynamic && is_first_dynamic cl then begin
-				has_value := true;
-				Some (enumerate_dynamic_fields ctx cl mk_push)
-			end else
-				None
-			in
+			let if_not_inst = None in
 
 			let if_not_inst = if is_override cl then
 				Some(
@@ -9094,10 +8990,7 @@ struct
 							*)
 							if not (Meta.has Meta.Final cl.cl_meta) then cl.cl_meta <- (Meta.Final, [], cl.cl_pos) :: cl.cl_meta
 						| TClassDecl ( { cl_super = None } as cl ) when cl.cl_path <> baseclass.cl_path && cl.cl_path <> baseinterface.cl_path && cl.cl_path <> basedynamic.cl_path ->
-							if is_some cl.cl_dynamic then
-								cl.cl_super <- Some (basedynamic,[])
-							else
-								cl.cl_super <- Some (baseclass,[])
+							cl.cl_super <- Some (baseclass,[])
 						| TClassDecl ( { cl_super = Some(super,_) } as cl ) when cl.cl_path <> baseclass.cl_path && cl.cl_path <> baseinterface.cl_path && not ( is_hxgen (TClassDecl super) ) ->
 							cl.cl_implements <- (baseinterface, []) :: cl.cl_implements
 						| _ -> ()
@@ -9126,7 +9019,6 @@ struct
 		let run = (fun md -> match md with
 			| TClassDecl cl when is_hxgen md && ( not cl.cl_interface || cl.cl_path = baseinterface.cl_path ) && (match cl.cl_kind with KAbstractImpl _ -> false | _ -> true) ->
 				(if Meta.has Meta.ReplaceReflection cl.cl_meta then replace_reflection ctx cl);
-				(implement_dynamics ctx cl);
 				(if not (PMap.mem (gen.gmk_internal_name "hx" "lookupField") cl.cl_fields) then implement_final_lookup ctx cl);
 				(if not (PMap.mem (gen.gmk_internal_name "hx" "getField") cl.cl_fields) then implement_get_set ctx cl);
 				(if not (PMap.mem (gen.gmk_internal_name "hx" "invokeField") cl.cl_fields) then implement_invokeField ctx ~slow_invoke:slow_invoke cl);
