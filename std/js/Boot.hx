@@ -77,18 +77,18 @@ class Boot {
 	}
 
 	static inline function isClass(o:Dynamic) : Bool {
-		return untyped __define_feature__("js.Boot.isClass", o.__name__);
+		return untyped __define_feature__("js.Boot.isClass", (cast o).__name__);
 	}
 
 	static inline function isEnum(e:Dynamic) : Bool {
-		return untyped __define_feature__("js.Boot.isEnum", e.__ename__);
+		return untyped __define_feature__("js.Boot.isEnum", (cast e).__ename__);
 	}
 
 	static function getClass(o:Dynamic) : Dynamic {
 		if (Std.is(o, Array))
 			return Array;
 		else {
-			var cl = untyped __define_feature__("js.Boot.getClass", o.__class__);
+			var cl = untyped __define_feature__("js.Boot.getClass", (cast o).__class__);
 			if (cl != null)
 				return cl;
 			var name = __nativeClassName(o);
@@ -176,14 +176,14 @@ class Boot {
 			return false;
 		if( cc == cl )
 			return true;
-		var intf : Dynamic = cc.__interfaces__;
+		var intf : Array<Dynamic> = (cast cc).__interfaces__;
 		if( intf != null )
 			for( i in 0...intf.length ) {
 				var i : Dynamic = intf[i];
 				if( i == cl || __interfLoop(i,cl) )
 					return true;
 			}
-		return __interfLoop(cc.__super__,cl);
+		return __interfLoop((cast cc).__super__,cl);
 	}
 
 	@:ifFeature("typed_catch") private static function __instanceof(o : Dynamic,cl : Dynamic) {
@@ -199,7 +199,7 @@ class Boot {
 		case String:
 			return (untyped __js__("typeof"))(o) == "string";
 		case Array:
-			return (untyped __js__("(o instanceof Array)")) && o.__enum__ == null;
+			return (untyped __js__("(o instanceof Array)")) && (cast o).__enum__ == null;
 		case Dynamic:
 			return true;
 		default:
@@ -219,9 +219,9 @@ class Boot {
 				return false;
 			}
 			// do not use isClass/isEnum here
-			untyped __feature__("Class.*",if( cl == Class && o.__name__ != null ) return true);
-			untyped __feature__("Enum.*",if( cl == Enum && o.__ename__ != null ) return true);
-			return o.__enum__ == cl;
+			untyped __feature__("Class.*",if( cl == Class && (cast o).__name__ != null ) return true);
+			untyped __feature__("Enum.*",if( cl == Enum && (cast o).__ename__ != null ) return true);
+			return (cast o).__enum__ == cl;
 		}
 	}
 

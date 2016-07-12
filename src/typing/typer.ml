@@ -1552,7 +1552,7 @@ and type_field ?(resume=false) ctx e i p mode =
 		(try
 			using_field ctx mode e i p
 		with Not_found ->
-			AKExpr (mk (TField (e,FDynamic i)) TDynamic p))
+			error "Field access on Dynamic is not supported" p)
 	| TAnon a ->
 		(try
 			let f = PMap.find i a.a_fields in
