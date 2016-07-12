@@ -34,7 +34,6 @@ and var_access =
 	| AccNormal
 	| AccNo				(* can't be accessed outside of the class itself and its subclasses *)
 	| AccNever			(* can't be accessed, even in subclasses *)
-	| AccResolve		(* call resolve("field") when accessed *)
 	| AccCall			(* perform a method call when accessed *)
 	| AccInline			(* similar to Normal but inline when accessed *)
 	| AccRequire of string * string option (* set when @:require(cond) fails *)
@@ -913,7 +912,6 @@ let s_access is_read = function
 	| AccNormal -> "default"
 	| AccNo -> "null"
 	| AccNever -> "never"
-	| AccResolve -> "resolve"
 	| AccCall -> if is_read then "get" else "set"
 	| AccInline	-> "inline"
 	| AccRequire (n,_) -> "require " ^ n
@@ -1472,7 +1470,7 @@ let unify_access a1 a2 =
 
 let direct_access = function
 	| AccNo | AccNever | AccNormal | AccInline | AccRequire _ -> true
-	| AccResolve | AccCall -> false
+	| AccCall -> false
 
 let unify_kind k1 k2 =
 	k1 = k2 || match k1, k2 with

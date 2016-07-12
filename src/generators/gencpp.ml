@@ -4696,7 +4696,6 @@ let access_str a = match a with
    | AccNormal -> "AccNormal"
    | AccNo -> "AccNo"
    | AccNever -> "AccNever"
-   | AccResolve -> "AccResolve"
    | AccCall -> "AccCall"
    | AccInline -> "AccInline"
    | AccRequire(_,_) -> "AccRequire" ;;
@@ -5969,7 +5968,6 @@ type cppia_op =
    | IaClass
    | IaAccessNormal
    | IaAccessNot
-   | IaAccessResolve
    | IaAccessCall
    | IaEnum
    | IaInline
@@ -6052,7 +6050,6 @@ let cppia_op_info = function
    | IaClass -> ("CLASS", 68)
    | IaAccessNormal -> ("N", 69)
    | IaAccessNot  -> ("n", 70)
-   | IaAccessResolve  -> ("R", 71)
    | IaAccessCall -> ("C", 72)
    | IaEnum -> ("ENUM", 73)
    | IaInline -> ("INLINE", 74)
@@ -6641,7 +6638,6 @@ let generate_script_class common_ctx script class_def =
          | AccNormal -> IaAccessNormal
          | AccNo -> IaAccessNot
          | AccNever -> IaAccessNot
-         | AccResolve -> IaAccessResolve
          | AccCall -> if ( (has_meta_key class_def.cl_meta Meta.NativeProperty) ||
                            (has_meta_key field.cf_meta Meta.NativeProperty) ||
                            (Common.defined common_ctx Define.ForceNativeProperty) )

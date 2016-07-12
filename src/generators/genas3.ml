@@ -994,7 +994,7 @@ let generate_field ctx static f =
 		| _ -> ()
 	) f.cf_meta;
 	let public = f.cf_public || Hashtbl.mem ctx.get_sets (f.cf_name,static) || (f.cf_name = "main" && static)
-		|| f.cf_name = "resolve" || Ast.Meta.has Ast.Meta.Public f.cf_meta
+		|| Ast.Meta.has Ast.Meta.Public f.cf_meta
 		(* consider all abstract methods public to avoid issues with inlined private access *)
 	    || (match ctx.curclass.cl_kind with KAbstractImpl _ -> true | _ -> false)
 	in
