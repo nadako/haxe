@@ -808,7 +808,7 @@ class TestType extends Test {
 
 		// note for later: As3 compilation fails if the function name is removed
 		mr["101"] = function n(x) return 9 + x;
-		eq(mr["101"](1), 10);
+		eq((mr["101"] : Int->Int)(1), 10);
 	}
 
 	function testAbstractClosure() {

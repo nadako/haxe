@@ -263,7 +263,7 @@ class Test {
 	static function onError( e : Dynamic, msg : String, context : String ) {
 		var msg = "???";
 		var stack :String = #if js
-			e.stack;
+			untyped e.stack;
 		#else
 			haxe.CallStack.toString(haxe.CallStack.exceptionStack());
 		#end

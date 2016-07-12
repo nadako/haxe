@@ -312,13 +312,13 @@ class Template {
 			return makeConst(p.p);
 		switch( p.p ) {
 		case "(":
-			var e1:Dynamic = makeExpr(l);
+			var e1:Void->Dynamic = makeExpr(l);
 			var p = l.pop();
 			if( p == null || p.s )
 				throw p;
 			if( p.p == ")" )
 				return e1;
-			var e2:Dynamic = makeExpr(l);
+			var e2:Void->Dynamic = makeExpr(l);
 			var p2 = l.pop();
 			if( p2 == null || p2.p != ")" )
 				throw p2;
@@ -370,11 +370,11 @@ class Template {
 		case OpForeach(e,loop):
 			var v : Dynamic = e();
 			try {
-				var x : Dynamic = v.iterator();
-				if( x.hasNext == null ) throw null;
+				var x : Dynamic = (cast v).iterator();
+				if( untyped x.hasNext == null ) throw null;
 				v = x;
 			} catch( e : Dynamic ) try {
-				if( v.hasNext == null ) throw null;
+				if( untyped v.hasNext == null ) throw null;
 			} catch( e : Dynamic ) {
 				throw "Cannot iter on " + v;
 			}

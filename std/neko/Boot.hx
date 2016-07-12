@@ -21,6 +21,12 @@
  */
 package neko;
 
+private typedef EnumImpl = {
+	?tag:String,
+	?args:Array<Dynamic>,
+	?__string:Void->String
+}
+
 @:dox(hide)
 @:keep
 class Boot {
@@ -29,7 +35,7 @@ class Boot {
 		return untyped "<...>".__s;
 	}
 
-	private static function __enum_str(e : Dynamic) {
+	private static function __enum_str(e : EnumImpl) {
 		if( e.args == null )
 			return e.tag;
 		var s : String = e.tag + untyped "(".__s;
@@ -56,14 +62,14 @@ class Boot {
 			return false;
 		if( cc == cl )
 			return true;
-		var intf : Dynamic = cc.__interfaces__;
+		var intf : Array<Dynamic> = untyped cc.__interfaces__;
 		if( intf != null )
 			for( i in 0...intf.length ) {
 				var i = intf[i];
 				if( i == cl || __interfLoop(i,cl) )
 					return true;
 			}
-		return __interfLoop(cc.__super__,cl);
+		return __interfLoop(untyped cc.__super__,cl);
 	}
 
 	@:ifFeature("typed_catch")

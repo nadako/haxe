@@ -81,23 +81,23 @@ class Float32Array {
 	}
 
 	static function _set( ?arg : Dynamic, ?offset : Int ) {
-		if( Std.is(arg.buffer,ArrayBuffer) ) {
+		if( Std.is(untyped arg.buffer,ArrayBuffer) ) {
 			var a : Array<Int> = arg;
-			if( arg.byteLength + offset > nativeThis.byteLength )
+			if( (untyped arg.byteLength:Int) + offset > (untyped nativeThis.byteLength:Int) )
 				throw "set() outside of range";
-			for( i in 0...arg.byteLength )
-				nativeThis[i + offset] = a[i];
+			for( i in 0...untyped arg.byteLength )
+				untyped nativeThis[i + offset] = a[i];
 		} else if( Std.is(arg,Array) ) {
 			var a : Array<Int> = arg;
-			if( a.length + offset > nativeThis.byteLength )
+			if( a.length + offset > (untyped nativeThis.byteLength:Int) )
 				throw "set() outside of range";
 			for( i in 0...a.length )
-				nativeThis[i + offset] = a[i];
+				untyped nativeThis[i + offset] = a[i];
 		} else
 			throw "TODO";
 	}
 
-	static function _subarray( start : Int, ?end : Int ) {
+	static function _subarray( start : Int, ?end : Int ) untyped {
 		var a = _new(nativeThis.slice(start,end));
 		a.byteOffset = start * 4;
 		return a;

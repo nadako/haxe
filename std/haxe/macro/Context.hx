@@ -430,7 +430,7 @@ class Context {
 		Returns the information stored in `Position` `p`.
 	**/
 	public static function getPosInfos( p : Position ) : { min : Int, max : Int, file : String } {
-		var i = load("get_pos_infos",1)(p);
+		var i:{ min : Int, max : Int, file : String } = load("get_pos_infos",1)(p);
 		i.file = new String(i.file);
 		return i;
 	}
@@ -590,7 +590,7 @@ class Context {
 	@:allow(haxe.macro.TypeTools)
 	@:allow(haxe.macro.MacroStringTools)
 	@:allow(haxe.macro.TypedExprTools)
-	static function load( f, nargs ) : Dynamic {
+	static function load( f, nargs ) : haxe.Constraints.Function {
 		#if macro
 		return neko.Lib.load("macro", f, nargs);
 		#else

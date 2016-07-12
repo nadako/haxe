@@ -38,7 +38,7 @@ class TestMatchMacro {
 		var result = try {
 			haxe.macro.Context.typeof(e);
 			"no error";
-		} catch (e:Dynamic) Std.string(e.message);
+		} catch (e:Dynamic) Std.string(untyped e.message);
 		return macro $v{result};
 	}
 }

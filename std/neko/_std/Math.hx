@@ -28,6 +28,29 @@ private class MathImpl {
 	static var _rand_float = Lib.load("std","random_float",1);
 	static var _rand_int = Lib.load("std","random_int",2);
 
+	static var PI;
+	static var NaN;
+	static var POSITIVE_INFINITY;
+	static var NEGATIVE_INFINITY;
+	static var abs;
+	static var sin;
+	static var cos;
+	static var atan2;
+	static var tan;
+	static var exp;
+	static var log;
+	static var sqrt;
+	static var round;
+	static var floor;
+	static var ceil;
+	static var atan;
+	static var asin;
+	static var acos;
+	static var pow;
+	static var fceil;
+	static var ffloor;
+	static var fround;
+
 	public static function min(a:Float,b:Float) : Float { return if( a < b ) a else if( untyped $isnan(a) ) a else b; }
 	public static function max(a:Float,b:Float) : Float { return if( a < b ) b else if( untyped $isnan(b) ) b else a; }
 	public static function random() : Float { return _rand_float(__rnd); }
@@ -35,7 +58,7 @@ private class MathImpl {
 	public static function isFinite(f:Float) : Bool { return !untyped (__dollar__isinfinite(f) || __dollar__isnan(f)); }
 
 	static function __init__() : Void {
-		var M : Dynamic = MathImpl;
+		var M = MathImpl;
 	 	__rnd = Lib.load("std","random_new",0)();
 	 	M.PI = Lib.load("std","math_pi",0)();
 	 	M.NaN = 0.0 / 0.0;

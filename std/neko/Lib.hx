@@ -21,9 +21,11 @@
  */
 package neko;
 
+import haxe.Constraints.Function;
+
 /**
-	Platform-specific Neko Library. Provides some platform-specific functions 
-	for the Neko target, such as conversion from Haxe types to native types 
+	Platform-specific Neko Library. Provides some platform-specific functions
+	for the Neko target, such as conversion from Haxe types to native types
 	and vice-versa.
 **/
 class Lib {
@@ -31,11 +33,11 @@ class Lib {
 	/**
 		Load and return a Neko primitive from a NDLL library.
 	**/
-	public static function load( lib : String, prim : String, nargs : Int ) : Dynamic {
+	public static function load( lib : String, prim : String, nargs : Int ) : Function {
 		return untyped __dollar__loader.loadprim((lib+"@"+prim).__s,nargs);
 	}
 
-	public static function loadLazy(lib,prim,nargs) : Dynamic {
+	public static function loadLazy(lib,prim,nargs) : Function {
 		try {
 			return load(lib,prim,nargs);
 		} catch( e : Dynamic ) {

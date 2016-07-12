@@ -21,6 +21,8 @@
  */
 package neko;
 
+import haxe.Constraints.Function;
+
 /**
 	This class is used for accessing the local Web server and the current
 	client request and informations.
@@ -297,24 +299,24 @@ class Web {
 	public static var isModNeko(default,null) : Bool;
 	public static var isTora(default,null) : Bool;
 
-	static var _set_main : Dynamic;
-	static var _get_host_name : Dynamic;
-	static var _get_client_ip : Dynamic;
-	static var _get_uri : Dynamic;
-	static var _cgi_redirect : Dynamic;
-	static var _cgi_set_header : Dynamic;
-	static var _set_return_code : Dynamic;
-	static var _get_client_header : Dynamic;
-	static var _get_params_string : Dynamic;
-	static var _get_post_data : Dynamic;
-	static var _get_params : Dynamic;
-	static var _get_cookies : Dynamic;
-	static var _set_cookie : Dynamic;
-	static var _get_cwd : Dynamic;
-	static var _parse_multipart : Dynamic;
-	static var _flush : Dynamic;
-	static var _get_client_headers : Dynamic;
-	static var _get_http_method : Dynamic;
+	static var _set_main : Function;
+	static var _get_host_name : Function;
+	static var _get_client_ip : Function;
+	static var _get_uri : Function;
+	static var _cgi_redirect : Function;
+	static var _cgi_set_header : Function;
+	static var _set_return_code : Function;
+	static var _get_client_header : Function;
+	static var _get_params_string : Function;
+	static var _get_post_data : Function;
+	static var _get_params : Function;
+	static var _get_cookies : Function;
+	static var _set_cookie : Function;
+	static var _get_cwd : Function;
+	static var _parse_multipart : Function;
+	static var _flush : Function;
+	static var _get_client_headers : Function;
+	static var _get_http_method : Function;
 	static var _base_decode = Lib.load("std","base_decode",2);
 	static var _log_message : Dynamic;
 

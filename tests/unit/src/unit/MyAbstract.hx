@@ -251,11 +251,11 @@ abstract MyAbstractSetter(Dynamic) {
 	}
 
 	inline function get_value() {
-		return this.value;
+		return untyped this.value;
 	}
 
 	inline function set_value(s:String) {
-		this.value = s;
+		untyped this.value = s;
 		return s;
 	}
 }

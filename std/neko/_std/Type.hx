@@ -226,7 +226,7 @@ enum ValueType {
 		for( c in cst ) {
 			var v = Reflect.field(e,c);
 			if( !Reflect.isFunction(v) )
-				all.push(v);
+				all.push((v : T));
 		}
 		return all;
 	}

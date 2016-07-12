@@ -31,7 +31,7 @@ class ArrayBuffer {
 	public function new( ?a : Dynamic ) {
 		if( Std.is(a,Array) ) {
 			this.a = a;
-			byteLength = a.length;
+			byteLength = this.a.length;
 		} else {
 			var len : Int = a;
 			this.a = [];
