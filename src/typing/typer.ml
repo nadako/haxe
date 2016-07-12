@@ -4183,15 +4183,6 @@ and type_call ctx e el (with_type:with_type) p =
 			mk (TCall (mk (TLocal v_trace) TDynamic p,[e;infos])) ctx.t.tvoid p
 		else
 			type_expr ctx (ECall ((EField ((EField ((EConst (Ident "haxe"),p),"Log"),p),"trace"),p),[mk_to_string_meta e;infos]),p) NoValue
-	| (EConst(Ident "callback"),p1),args ->
-		let ecb = try Some (type_ident_raise ctx "callback" p1 MCall) with Not_found -> None in
-		(match ecb with
-		| Some ecb ->
-			build_call ctx ecb args with_type p
-		| None ->
-			display_error ctx "callback syntax has changed to func.bind(args)" p;
-			let e = type_expr ctx e Value in
-			type_bind ctx e args p)
 	| (EField ((EConst (Ident "super"),_),_),_), _ ->
 		def()
 	| (EField (e,"bind"),p), args ->
