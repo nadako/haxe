@@ -89,7 +89,7 @@ enum Type {
 
 		@see http://haxe.org/manual/types-dynamic.html
 	**/
-	TDynamic( t : Null<Type> );
+	TDynamic;
 
 	/**
 		Used internally by the compiler to delay some typing.
@@ -608,11 +608,6 @@ enum VarAccess {
 		No access (`never`).
 	**/
 	AccNever;
-
-	/**
-		Unused.
-	**/
-	AccResolve;
 
 	/**
 		Access through accessor function (`get`, `set`, `dynamic`).
