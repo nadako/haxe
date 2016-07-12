@@ -344,7 +344,7 @@ module Pattern = struct
 						in
 						let patterns = loop el tl in
 						PatTuple patterns
-					| TInst({cl_path=[],"Array"},[t2]) | (TDynamic _ as t2) ->
+					| TInst({cl_path=[],"Array"},[t2]) | (TDynamic as t2) ->
 						let patterns = ExtList.List.mapi (fun i e ->
 							make pctx t2 e
 						) el in
@@ -808,7 +808,7 @@ module Compile = struct
 			List.map (type_field_access mctx.ctx e) sl
 		| ConArray 0 -> []
 		| ConArray i ->
-			let t = match follow e.etype with TInst({cl_path=[],"Array"},[t]) -> t | TDynamic _ as t -> t | _ -> assert false in
+			let t = match follow e.etype with TInst({cl_path=[],"Array"},[t]) -> t | TDynamic as t -> t | _ -> assert false in
 			ExtList.List.init i (fun i ->
 				let ei = Codegen.ExprBuilder.make_int mctx.ctx.com i e.epos in
 				mk (TArray(e,ei)) t e.epos
@@ -1138,11 +1138,11 @@ module TexprConverter = struct
 			| (con,_,_) :: _ ->
 				let fail() =
 					(* error "Could not determine switch kind, make sure the type is known" e.epos; *)
-					t_dynamic
+					TDynamic
 				in
 				let t = match con with
 					| ConEnum(en,_) -> TEnum(en,List.map snd en.e_params)
-					| ConArray _ -> ctx.t.tarray t_dynamic
+					| ConArray _ -> ctx.t.tarray TDynamic
 					| ConConst ct ->
 						begin match ct with
 							| TString _ -> ctx.t.tstring
@@ -1158,7 +1158,7 @@ module TexprConverter = struct
 				mk (TCast(e,None)) t e.epos,t,true
 		in
 		let e,t,inferred = match follow e.etype with
-			| TDynamic _ | TMono _ ->
+			| TDynamic | TMono _ ->
 				infer_type()
 			| _ ->
 				e,e.etype,false

@@ -132,7 +132,7 @@ and type_string_suff suffix haxe_type =
 		)
 	| TFun (args,haxe_type) -> "Dynamic"
 	| TAnon anon -> "Dynamic"
-	| TDynamic haxe_type -> "Dynamic"
+	| TDynamic -> "Dynamic"
 	| TLazy func -> type_string_suff suffix ((!func)())
 	)
 and type_string haxe_type =
@@ -168,7 +168,7 @@ let rec is_uncertain_type t =
 	  | Statics _
 	  | EnumStatics _ -> false
 	  | _ -> true)
-	| TDynamic _ -> true
+	| TDynamic -> true
 	| _ -> false
 
 let is_uncertain_expr e =
@@ -181,7 +181,7 @@ let rec is_anonym_type t =
 	  | Statics _
 	  | EnumStatics _ -> false
 	  | _ -> true)
-	| TDynamic _ -> true
+	| TDynamic -> true
 	| _ -> false
 
 let is_anonym_expr e = is_anonym_type e.etype
@@ -209,8 +209,8 @@ let rec is_string_type t =
 let is_string_expr e = is_string_type e.etype
 
 let to_string ctx e =
-	let v = alloc_var "__call__" t_dynamic e.epos in
-	let f = mk (TLocal v) t_dynamic e.epos in
+	let v = alloc_var "__call__" TDynamic e.epos in
+	let f = mk (TLocal v) TDynamic e.epos in
 	mk (TCall (f, [ Codegen.string ctx.com "_hx_string_rec" e.epos; e; Codegen.string ctx.com "" e.epos])) ctx.com.basic.tstring e.epos
 
 let as_string_expr ctx e =
@@ -222,8 +222,8 @@ let as_string_expr ctx e =
 	| _ -> e
 (* for known String type that could have null value *)
 let to_string_null ctx e =
-	let v = alloc_var "__call__" t_dynamic e.epos in
-	let f = mk (TLocal v) t_dynamic e.epos in
+	let v = alloc_var "__call__" TDynamic e.epos in
+	let f = mk (TLocal v) TDynamic e.epos in
 	mk (TCall (f, [ Codegen.string ctx.com "_hx_string_or_null" e.epos; e])) ctx.com.basic.tstring e.epos
 
 
@@ -1607,7 +1607,7 @@ and gen_expr ctx e =
 			| TAnon _ ->
 				assert false
 			| TMono _
-			| TDynamic _ ->
+			| TDynamic ->
 				catchall := true;
 				if not !first then spr ctx "{ ";
 				print ctx "$%s = $%s" ev evar;
@@ -1926,7 +1926,7 @@ let generate_field ctx static f =
 				| Var _ ->
 					(match follow f.cf_type with
 					| TFun _
-					| TDynamic _ ->
+					| TDynamic ->
 						print ctx "static function %s() { $args = func_get_args(); return call_user_func_array(self::$%s, $args); }" name name;
 						newline ctx;
 					| _ ->
@@ -1952,7 +1952,7 @@ let generate_static_field_assign ctx path f =
 				| Var _ when
 						(match follow f.cf_type with
 						| TFun _
-						| TDynamic _ ->
+						| TDynamic ->
 							true;
 						| _ ->
 							false) ->

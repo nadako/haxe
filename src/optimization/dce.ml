@@ -184,7 +184,7 @@ and mark_t dce p t =
 			List.iter (mark_t dce p) pl;
 			if not (Meta.has Meta.CoreType a.a_meta) then
 				mark_t dce p (Abstract.get_underlying_type a pl)
-		| TLazy _ | TDynamic _ | TType _ | TAnon _ | TMono _ -> ()
+		| TLazy _ | TDynamic | TType _ | TAnon _ | TMono _ -> ()
 		end;
 		dce.t_stack <- List.tl dce.t_stack
 	end
@@ -247,11 +247,8 @@ let rec to_string dce t = match t with
 		| _ -> ())
 	| TLazy f ->
 		to_string dce (!f())
-	| TDynamic t ->
-		if t == t_dynamic then
-			()
-		else
-			to_string dce t
+	| TDynamic ->
+		()
 	| TEnum _ | TFun _ | TAnon _ | TAbstract({a_impl = None},_) ->
 		(* if we to_string these it does not imply that we need all its sub-types *)
 		()
@@ -329,7 +326,7 @@ and is_array t = match follow t with
 
 and is_dynamic t = match follow t with
 	| TAbstract(a,tl) when not (Meta.has Meta.CoreType a.a_meta) -> is_dynamic (Abstract.get_underlying_type a tl)
-	| TDynamic _ -> true
+	| TDynamic -> true
 	| _ -> false
 
 and is_string t = match follow t with
@@ -367,7 +364,7 @@ and expr dce e =
 	| TTry(e, vl) ->
 		expr dce e;
 		List.iter (fun (v,e) ->
-			if v.v_type != t_dynamic then check_feature dce "typed_catch";
+			if v.v_type != TDynamic then check_feature dce "typed_catch";
 			expr dce e;
 			mark_t dce e.epos v.v_type;
 		) vl;
@@ -421,11 +418,11 @@ and expr dce e =
 		check_and_add_feature dce "unsafe_string_concat";
 		expr dce e1;
 		expr dce e2;
-	| TArray(({etype = TDynamic t} as e1),e2) when t == t_dynamic ->
+	| TArray(({etype = TDynamic} as e1),e2) ->
 		check_and_add_feature dce "dynamic_array_read";
 		expr dce e1;
 		expr dce e2;
-	| TBinop( (OpAssign | OpAssignOp _), ({eexpr = TArray({etype = TDynamic t},_)} as e1), e2) when t == t_dynamic ->
+	| TBinop( (OpAssign | OpAssignOp _), ({eexpr = TArray({etype = TDynamic},_)} as e1), e2) ->
 		check_and_add_feature dce "dynamic_array_write";
 		expr dce e1;
 		expr dce e2;

@@ -129,7 +129,7 @@ let is_exactly_bool gen t =
 
 let is_dynamic gen t =
 	match follow (gen.greal_type t) with
-		| TDynamic _ -> true
+		| TDynamic -> true
 		| _ -> false
 
 let is_pointer gen t =
@@ -219,7 +219,7 @@ struct
 		let basic = gen.gcon.basic in
 		let uint = match get_type gen ([], "UInt") with | TTypeDecl t -> TType(t, []) | TAbstractDecl a -> TAbstract(a, []) | _ -> assert false in
 
-		let is_var = alloc_var "__is__" t_dynamic in
+		let is_var = alloc_var "__is__" TDynamic in
 		let name () = match gen.gcurrent_class with
 			| Some cl -> path_s cl.cl_path
 			| _ -> ""
@@ -239,9 +239,9 @@ struct
 					) ->
 					let md = change_md md in
 					let mk_is obj md =
-						{ e with eexpr = TCall( { eexpr = TLocal is_var; etype = t_dynamic; epos = e.epos }, [
+						{ e with eexpr = TCall( { eexpr = TLocal is_var; etype = TDynamic; epos = e.epos }, [
 							obj;
-							{ eexpr = TTypeExpr md; etype = t_dynamic (* this is after all a syntax filter *); epos = e.epos }
+							{ eexpr = TTypeExpr md; etype = TDynamic (* this is after all a syntax filter *); epos = e.epos }
 						] ) }
 					in
 
@@ -428,7 +428,7 @@ struct
 			| _ -> ""
 		in
 
-		let as_var = alloc_var "__as__" t_dynamic in
+		let as_var = alloc_var "__as__" TDynamic in
 		let fast_cast = Common.defined gen.gcon Define.FastCast in
 
 		let rec run e =
@@ -550,7 +550,7 @@ struct
 					mk_ret { e with
 						eexpr = TCall({
 							eexpr = TField(run e1, FDynamic "Equals");
-							etype = TFun(["obj1",false,t_dynamic;], basic.tbool);
+							etype = TFun(["obj1",false,TDynamic;], basic.tbool);
 							epos = e1.epos
 						}, [ run e2 ])
 					}
@@ -605,7 +605,7 @@ let add_cast_handler gen =
 		let new_v = mk_temp gen "new_arr" to_t in
 		let i = mk_temp gen "i" basic.tint in
 		let old_len = mk_field_access gen e "Length" e.epos in
-		let obj_v = mk_temp gen "obj" t_dynamic in
+		let obj_v = mk_temp gen "obj" TDynamic in
 		let check_null = {eexpr = TBinop(Ast.OpNotEq, e, null e.etype e.epos); etype = basic.tbool; epos = e.epos} in
 		let block = [
 			{
@@ -637,7 +637,7 @@ let add_cast_handler gen =
 					},
 					{ eexpr = TBlock [
 						{
-							eexpr = TVar(obj_v, Some (mk_cast t_dynamic { eexpr = TArray(e, mk_local i e.epos); etype = old_param; epos = e.epos }));
+							eexpr = TVar(obj_v, Some (mk_cast TDynamic { eexpr = TArray(e, mk_local i e.epos); etype = old_param; epos = e.epos }));
 							etype = basic.tvoid;
 							epos = e.epos
 						};
@@ -855,7 +855,7 @@ let configure gen =
 			| TAbstract (a, pl) when not (Meta.has Meta.CoreType a.a_meta) ->
 					Some (gen.gfollow#run_f ( Abstract.get_underlying_type a pl) )
 			| TAbstract( { a_path = ([], "EnumValue") }, _	)
-			| TInst( { cl_path = ([], "EnumValue") }, _  ) -> Some t_dynamic
+			| TInst( { cl_path = ([], "EnumValue") }, _  ) -> Some TDynamic
 			| _ -> None);
 
 	let module_s_params md params =
@@ -881,7 +881,7 @@ let configure gen =
 
 	let has_tdyn tl =
 		List.exists (fun t -> match follow t with
-		| TDynamic _ | TMono _ -> true
+		| TDynamic | TMono _ -> true
 		| _ -> false
 	) tl
 	in
@@ -903,8 +903,8 @@ let configure gen =
 			| TInst( { cl_path = ([], "Class") }, _ )
 			| TInst( { cl_path = ([], "Enum") }, _ ) -> TInst(ttype,[])
 			| TInst( ({ cl_kind = KTypeParameter _ } as cl), _ ) when erase_generics && not (Meta.has Meta.NativeGeneric cl.cl_meta) ->
-				t_dynamic
-			| TInst({ cl_kind = KExpr _ }, _) -> t_dynamic
+				TDynamic
+			| TInst({ cl_kind = KExpr _ }, _) -> TDynamic
 			| TEnum(_, [])
 			| TInst(_, []) -> t
 			| TInst(cl, params) when
@@ -912,9 +912,9 @@ let configure gen =
 				Hashtbl.mem ifaces cl.cl_path ->
 					TInst(Hashtbl.find ifaces cl.cl_path, [])
 			| TEnum(e, params) ->
-				TEnum(e, List.map (fun _ -> t_dynamic) params)
+				TEnum(e, List.map (fun _ -> TDynamic) params)
 			| TInst(cl, params) when Meta.has Meta.Enum cl.cl_meta ->
-				TInst(cl, List.map (fun _ -> t_dynamic) params)
+				TInst(cl, List.map (fun _ -> TDynamic) params)
 			| TInst(cl, params) -> TInst(cl, change_param_type (TClassDecl cl) params)
 			| TType({ t_path = ([], "Null") }, [t]) ->
 				(*
@@ -925,7 +925,7 @@ let configure gen =
 				*)
 				if erase_generics then
 					if is_cs_basic_type t then
-						t_dynamic
+						TDynamic
 					else
 						real_type t
 				else
@@ -937,7 +937,7 @@ let configure gen =
 			| TType _ -> t
 			| TAnon (anon) when (match !(anon.a_status) with | Statics _ | EnumStatics _ | AbstractStatics _ -> true | _ -> false) -> t
 			| TFun _ -> TInst(fn_cl,[])
-			| _ -> t_dynamic
+			| _ -> TDynamic
 		in
 		ret
 	and
@@ -971,18 +971,18 @@ let configure gen =
 			| true, TInst _
 			| true, TEnum _
 			| true, TAbstract _ when is_cs_basic_type t_changed -> t
-			| true, TDynamic _ -> t
+			| true, TDynamic -> t
 			| true, x ->
 				dynamic_anon
 		in
-		if is_hxgeneric && (erase_generics || List.exists (fun t -> match follow t with | TDynamic _ -> true | _ -> false) tl) then
-			List.map (fun _ -> t_dynamic) tl
+		if is_hxgeneric && (erase_generics || List.exists (fun t -> match follow t with | TDynamic -> true | _ -> false) tl) then
+			List.map (fun _ -> TDynamic) tl
 		else
 			List.map ret tl
 	in
 
 	let is_dynamic t = match real_type t with
-		| TMono _ | TDynamic _
+		| TMono _ | TDynamic
 		| TInst({ cl_kind = KTypeParameter _ }, _) -> true
 		| TAnon anon ->
 			(match !(anon.a_status) with
@@ -1051,7 +1051,7 @@ let configure gen =
 				(match !(anon.a_status) with
 					| Statics _ | EnumStatics _ -> "System.Type"
 					| _ -> "object")
-			| TDynamic _ -> "object"
+			| TDynamic -> "object"
 			| TAbstract(a,pl) when not (Meta.has Meta.CoreType a.a_meta) ->
 				t_s (Abstract.get_underlying_type a pl)
 			(* No Lazy type nor Function type made. That's because function types will be at this point be converted into other types *)
@@ -1117,19 +1117,19 @@ let configure gen =
 			| TClassDecl ({ cl_params = [] } as cl) ->
 				t_s (TInst(cl,[]))
 			| TClassDecl (cl) when not (is_hxgen md) ->
-				t_s (TInst(cl,List.map (fun t -> t_dynamic) cl.cl_params))
+				t_s (TInst(cl,List.map (fun t -> TDynamic) cl.cl_params))
 			| TEnumDecl ({ e_params = [] } as e) ->
 				t_s (TEnum(e,[]))
 			| TEnumDecl (e) when not (is_hxgen md) ->
-				t_s (TEnum(e,List.map (fun t -> t_dynamic) e.e_params))
+				t_s (TEnum(e,List.map (fun t -> TDynamic) e.e_params))
 			| TClassDecl cl ->
 				t_s (TInst(cl,[]))
 			| TEnumDecl e ->
 				t_s (TEnum(e,[]))
 			| TTypeDecl t ->
-				t_s (TType(t, List.map (fun t -> t_dynamic) t.t_params))
+				t_s (TType(t, List.map (fun t -> TDynamic) t.t_params))
 			| TAbstractDecl a ->
-				t_s (TAbstract(a, List.map(fun t -> t_dynamic) a.a_params))
+				t_s (TAbstract(a, List.map(fun t -> TDynamic) a.a_params))
 	in
 
 	let rec ensure_local e explain =
@@ -1350,7 +1350,7 @@ let configure gen =
 							write w ")"
 				| TLocal { v_name = "__sbreak__" } -> write w "break"
 				| TLocal { v_name = "__undefined__" } ->
-					write w (t_s (TInst(runtime_cl, List.map (fun _ -> t_dynamic) runtime_cl.cl_params)));
+					write w (t_s (TInst(runtime_cl, List.map (fun _ -> TDynamic) runtime_cl.cl_params)));
 					write w ".undefined";
 				| TLocal { v_name = "__typeof__" } -> write w "typeof"
 				| TLocal { v_name = "__sizeof__" } -> write w "sizeof"
@@ -2107,7 +2107,7 @@ let configure gen =
 				let is_override = is_override || match cf.cf_name, follow cf.cf_type with
 					| "Equals", TFun([_,_,targ], tret) ->
 						(match follow targ, follow tret with
-							| TDynamic _, TAbstract({ a_path = ([], "Bool") }, []) -> true
+							| TDynamic, TAbstract({ a_path = ([], "Bool") }, []) -> true
 							| _ -> false)
 					| "GetHashCode", TFun([],_) -> true
 					| _ -> false
@@ -2144,7 +2144,7 @@ let configure gen =
 						match meta with
 							| [] ->
 								let expr = match cf.cf_expr with
-									| None -> mk (TBlock([])) t_dynamic Ast.null_pos
+									| None -> mk (TBlock([])) TDynamic Ast.null_pos
 									| Some s ->
 										match s.eexpr with
 											| TFunction tf ->
@@ -2269,7 +2269,7 @@ let configure gen =
 				match cl.cl_array_access with
 					| None -> ()
 					| Some t ->
-						let changed_t = apply_params cl.cl_params (List.map (fun _ -> t_dynamic) cl.cl_params) t in
+						let changed_t = apply_params cl.cl_params (List.map (fun _ -> TDynamic) cl.cl_params) t in
 						let t_as_s = t_s (run_follow gen changed_t) in
 						print w "%s %s.this[int key]" t_as_s (t_s (TInst(cl, args)));
 							begin_block w;
@@ -2287,7 +2287,7 @@ let configure gen =
 			) cl.cl_implements
 		with | Not_found -> ());
 		if cl.cl_interface && is_hxgen (TClassDecl cl) && is_some cl.cl_array_access then begin
-			let changed_t = apply_params cl.cl_params (List.map (fun _ -> t_dynamic) cl.cl_params) (get cl.cl_array_access) in
+			let changed_t = apply_params cl.cl_params (List.map (fun _ -> TDynamic) cl.cl_params) (get cl.cl_array_access) in
 			print w "%s this[int key]" (t_s (run_follow gen changed_t));
 			begin_block w;
 				write w "get;";
@@ -2424,7 +2424,7 @@ let configure gen =
 					write w "public static void Main() ";
 					begin_block w;
 					(if Hashtbl.mem gen.gtypes (["cs"], "Boot") then write w "global::cs.Boot.init();"; newline w);
-					expr_s w { eexpr = TTypeExpr(TClassDecl cl); etype = t_dynamic; epos = Ast.null_pos };
+					expr_s w { eexpr = TTypeExpr(TClassDecl cl); etype = TDynamic; epos = Ast.null_pos };
 					write w ".main();";
 					end_block w;
 					end_block w;
@@ -2740,7 +2740,7 @@ let configure gen =
 
 	StubClosureImpl.configure gen (StubClosureImpl.default_implementation gen float_cl 10 (fun e _ _ -> e));*)
 
-	let tp_v = alloc_var "$type_param" t_dynamic in
+	let tp_v = alloc_var "$type_param" TDynamic in
 	let mk_tp t pos = { eexpr = TLocal(tp_v); etype = t; epos = pos } in
 	TypeParams.configure gen (fun ecall efield params elist ->
 		match efield.eexpr with
@@ -2763,7 +2763,7 @@ let configure gen =
 		)
 		(fun v t has_value ->
 			match has_value, real_type v.etype with
-				| true, TDynamic _ | true, TAnon _ | true, TMono _ ->
+				| true, TDynamic | true, TAnon _ | true, TMono _ ->
 					{
 						eexpr = TCall(mk_static_field_access_infer null_t "ofDynamic" v.epos [t], [mk_tp t v.epos; v]);
 						etype = TInst(null_t, [t]);
@@ -2775,9 +2775,9 @@ let configure gen =
 		(fun e ->
 			{
 				eexpr = TCall(
-					{ (mk_field_access gen { (mk_paren e) with etype = real_type e.etype } "toDynamic" e.epos) with etype = TFun([], t_dynamic) },
+					{ (mk_field_access gen { (mk_paren e) with etype = real_type e.etype } "toDynamic" e.epos) with etype = TFun([], TDynamic) },
 					[]);
-				etype = t_dynamic;
+				etype = TDynamic;
 				epos = e.epos
 			}
 		)
@@ -2843,7 +2843,7 @@ let configure gen =
 		if erase_generics then begin
 			let get_specialized_postfix t = match t with
 				| TAbstract({a_path = [],("Float" | "Int" as name)}, _) -> name
-				| TAnon _ | TDynamic _ -> "Dynamic"
+				| TAnon _ | TDynamic -> "Dynamic"
 				| _ -> print_endline (debug_type t); assert false
 			in
 			(fun t -> mk_static_field_access_infer (get_cl (get_type gen (["haxe";"lang"], "FieldLookup"))) ("insert" ^ get_specialized_postfix t) Ast.null_pos []),
@@ -2892,9 +2892,9 @@ let configure gen =
 		in
 
 		let arr_call = if args <> [] then
-			{ eexpr = TArrayDecl args; etype = basic.tarray t_dynamic; epos = ecall.epos }
+			{ eexpr = TArrayDecl args; etype = basic.tarray TDynamic; epos = ecall.epos }
 		else
-			null (basic.tarray t_dynamic) ecall.epos
+			null (basic.tarray TDynamic) ecall.epos
 		in
 
 		let call_args =
@@ -2956,7 +2956,7 @@ let configure gen =
 	let slow_invoke = mk_static_field_access_infer (runtime_cl) "slowCallField" Ast.null_pos [] in
 	ReflectionCFs.configure rcf_ctx ~slow_invoke:(fun ethis efield eargs -> {
 		eexpr = TCall(slow_invoke, [ethis; efield; eargs]);
-		etype = t_dynamic;
+		etype = TDynamic;
 		epos = ethis.epos;
 	} ) object_iface;
 
@@ -2970,7 +2970,7 @@ let configure gen =
 		match e.eexpr with
 			| TArray(e1, e2) ->
 				(match follow e1.etype with
-					| TDynamic _ | TAnon _ | TMono _ -> true
+					| TDynamic | TAnon _ | TMono _ -> true
 					| TInst({ cl_kind = KTypeParameter _ }, _) -> true
 					| TInst(c,p) when erase_generics && is_hxgeneric (TClassDecl c) && is_hxgen (TClassDecl c) -> (match c.cl_path with
 						| [],"String"
@@ -2978,7 +2978,7 @@ let configure gen =
 						| _ ->
 							true)
 					| _ -> match binop, change_param_type (t_to_md e1.etype) [e.etype] with
-						| Some(Ast.OpAssignOp _), ([TDynamic _] | [TAnon _]) ->
+						| Some(Ast.OpAssignOp _), ([TDynamic] | [TAnon _]) ->
 							true
 						| _ -> false)
 			| _ -> assert false
@@ -3033,7 +3033,7 @@ let configure gen =
 
 	let should_handle_opeq t =
 		match real_type t with
-			| TDynamic _ | TAnon _ | TMono _
+			| TDynamic | TAnon _ | TMono _
 			| TInst( { cl_kind = KTypeParameter _ }, _ )
 			| TInst( { cl_path = (["haxe";"lang"], "Null") }, _ ) -> true
 			| _ -> false
@@ -3078,8 +3078,8 @@ let configure gen =
 		(fun e1 e2 ->
 			let is_basic = is_cs_basic_type (follow e1.etype) || is_cs_basic_type (follow e2.etype) in
 			let is_ref = if is_basic then false else match follow e1.etype, follow e2.etype with
-				| TDynamic _, _
-				| _, TDynamic _
+				| TDynamic, _
+				| _, TDynamic
 				| TInst( { cl_path = ([], "String") }, [] ), _
 				| _, TInst( { cl_path = ([], "String") }, [] )
 				| TInst( { cl_kind = KTypeParameter _ }, [] ), _
@@ -3112,7 +3112,7 @@ let configure gen =
 					}
 				| _ ->
 					let static = mk_static_field_access_infer (runtime_cl) "plus"  e1.epos [] in
-					mk_cast e.etype { eexpr = TCall(static, [e1; e2]); etype = t_dynamic; epos=e1.epos })
+					mk_cast e.etype { eexpr = TCall(static, [e1; e2]); etype = TDynamic; epos=e1.epos })
 		(fun e1 e2 ->
 			if is_string e1.etype then begin
 				{ e1 with eexpr = TCall(mk_static_field_access_infer string_cl "Compare" e1.epos [], [ e1; e2 ]); etype = gen.gcon.basic.tint }
@@ -3144,7 +3144,7 @@ let configure gen =
 		TryCatchWrapper.traverse gen
 			(fun t -> not (is_exception (real_type t)))
 			(fun throwexpr expr ->
-				let wrap_static = mk_static_field_access (hx_exception) "wrap" (TFun([("obj",false,t_dynamic)], base_exception_t)) expr.epos in
+				let wrap_static = mk_static_field_access (hx_exception) "wrap" (TFun([("obj",false,TDynamic)], base_exception_t)) expr.epos in
 				{ throwexpr with eexpr = TThrow { expr with eexpr = TCall(wrap_static, [expr]); etype = hx_exception_t }; etype = gen.gcon.basic.tvoid }
 			)
 			(fun v_to_unwrap pos ->
@@ -3152,7 +3152,7 @@ let configure gen =
 				mk_field_access gen local "obj" pos
 			)
 			(fun rethrow ->
-				{ rethrow with eexpr = TCall(mk_local (alloc_var "__rethrow__" t_dynamic) rethrow.epos, [rethrow]); etype = gen.gcon.basic.tvoid }
+				{ rethrow with eexpr = TCall(mk_local (alloc_var "__rethrow__" TDynamic) rethrow.epos, [rethrow]); etype = gen.gcon.basic.tvoid }
 			)
 			(base_exception_t)
 			(hx_exception_t)
@@ -3167,7 +3167,7 @@ let configure gen =
 	);
 
 	let get_typeof e =
-		{ e with eexpr = TCall( { eexpr = TLocal( alloc_var "__typeof__" t_dynamic ); etype = t_dynamic; epos = e.epos }, [e] ) }
+		{ e with eexpr = TCall( { eexpr = TLocal( alloc_var "__typeof__" TDynamic ); etype = TDynamic; epos = e.epos }, [e] ) }
 	in
 
 	ClassInstance.configure gen (ClassInstance.traverse gen (fun e mt ->
@@ -3202,15 +3202,15 @@ let configure gen =
 
 	ArrayDeclSynf.configure gen (ArrayDeclSynf.default_implementation gen native_arr_cl);
 
-	let goto_special = alloc_var "__goto__" t_dynamic in
-	let label_special = alloc_var "__label__" t_dynamic in
+	let goto_special = alloc_var "__goto__" TDynamic in
+	let label_special = alloc_var "__label__" TDynamic in
 	SwitchBreakSynf.configure gen (SwitchBreakSynf.traverse gen
 		(fun e_loop n api ->
-			api ({ eexpr = TCall( mk_local label_special e_loop.epos, [ mk_int gen n e_loop.epos ] ); etype = t_dynamic; epos = e_loop.epos }) false;
+			api ({ eexpr = TCall( mk_local label_special e_loop.epos, [ mk_int gen n e_loop.epos ] ); etype = TDynamic; epos = e_loop.epos }) false;
 			e_loop
 		)
 		(fun e_break n api ->
-			{ eexpr = TCall( mk_local goto_special e_break.epos, [ mk_int gen n e_break.epos ] ); etype = t_dynamic; epos = e_break.epos }
+			{ eexpr = TCall( mk_local goto_special e_break.epos, [ mk_int gen n e_break.epos ] ); etype = TDynamic; epos = e_break.epos }
 		)
 	);
 
@@ -3370,7 +3370,7 @@ let generate con =
 		let type_cl = get_cl ( get_type gen (["System"], "Type")) in
 		let basic_fns =
 		[
-			mk_class_field "Equals" (TFun(["obj",false,t_dynamic], basic.tbool)) true Ast.null_pos (Method MethNormal) [];
+			mk_class_field "Equals" (TFun(["obj",false,TDynamic], basic.tbool)) true Ast.null_pos (Method MethNormal) [];
 			mk_class_field "ToString" (TFun([], basic.tstring)) true Ast.null_pos (Method MethNormal) [];
 			mk_class_field "GetHashCode" (TFun([], basic.tint)) true Ast.null_pos (Method MethNormal) [];
 			mk_class_field "GetType" (TFun([], TInst(type_cl, []))) true Ast.null_pos (Method MethNormal) [];

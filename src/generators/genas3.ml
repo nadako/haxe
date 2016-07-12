@@ -286,7 +286,7 @@ let rec type_str ctx t p =
 		"Function"
 	| TMono r ->
 		(match !r with None -> "*" | Some t -> type_str ctx t p)
-	| TAnon _ | TDynamic _ ->
+	| TAnon _ | TDynamic ->
 		"*"
 	| TType (t,args) ->
 		(match t.t_path with
@@ -518,7 +518,7 @@ let rec gen_call ctx e el r =
 		| _ -> assert false)
 	| TField(e1, (FAnon {cf_name = s} | FDynamic s)),[ef] when s = "map" || s = "filter" ->
 		spr ctx (s_path ctx true (["flash";],"Boot") e.epos);
-		gen_field_access ctx t_dynamic (s ^ "Dynamic");
+		gen_field_access ctx TDynamic (s ^ "Dynamic");
 		spr ctx "(";
 		concat ctx "," (gen_value ctx) [e1;ef];
 		spr ctx ")"
@@ -605,7 +605,7 @@ and gen_expr ctx e =
 		spr ctx "]";
 	| TBinop (Ast.OpEq,e1,e2) when (match is_special_compare e1 e2 with Some c -> true | None -> false) ->
 		let c = match is_special_compare e1 e2 with Some c -> c | None -> assert false in
-		gen_expr ctx (mk (TCall (mk (TField (mk (TTypeExpr (TClassDecl c)) t_dynamic e.epos,FDynamic "compare")) t_dynamic e.epos,[e1;e2])) ctx.inf.com.basic.tbool e.epos);
+		gen_expr ctx (mk (TCall (mk (TField (mk (TTypeExpr (TClassDecl c)) TDynamic e.epos,FDynamic "compare")) TDynamic e.epos,[e1;e2])) ctx.inf.com.basic.tbool e.epos);
 	(* what is this used for? *)
 (* 	| TBinop (op,{ eexpr = TField (e1,s) },e2) ->
 		gen_value_op ctx e1;
@@ -830,7 +830,7 @@ and gen_block ctx e =
 and gen_value ctx e =
 	let assign e =
 		mk (TBinop (Ast.OpAssign,
-			mk (TLocal (match ctx.in_value with None -> assert false | Some r -> r)) t_dynamic e.epos,
+			mk (TLocal (match ctx.in_value with None -> assert false | Some r -> r)) TDynamic e.epos,
 			e
 		)) e.etype e.epos
 	in

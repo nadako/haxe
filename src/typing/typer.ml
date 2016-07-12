@@ -90,7 +90,7 @@ let rec classify t =
 	| TAbstract (a,[]) when List.exists (fun t -> match classify t with KInt | KFloat -> true | _ -> false) a.a_to -> KParam t
 	| TInst ({ cl_kind = KTypeParameter ctl },_) when List.exists (fun t -> match classify t with KInt | KFloat -> true | _ -> false) ctl -> KParam t
 	| TMono r when !r = None -> KUnk
-	| TDynamic _ -> KDyn
+	| TDynamic -> KDyn
 	| _ -> KOther
 
 let get_iterator_param t =
@@ -556,7 +556,7 @@ let rec unify_min_raise ctx (el:texpr list) : t =
 					loop t);
 				tl := t :: !tl;
 			| TEnum(en,(_ :: _ as tl2)) ->
-				tl := (TEnum(en,List.map (fun _ -> t_dynamic) tl2)) :: !tl;
+				tl := (TEnum(en,List.map (fun _ -> TDynamic) tl2)) :: !tl;
 				tl := t :: !tl;
 			| TType (td,pl) ->
 				loop (apply_params td.t_params pl td.t_type);
@@ -637,7 +637,7 @@ let rec unify_min_raise ctx (el:texpr list) : t =
 				in
 				match t with
 				| TInst (c,params) when params <> [] && loop c ->
-					TInst (c,List.map (fun _ -> t_dynamic) params) :: acc
+					TInst (c,List.map (fun _ -> TDynamic) params) :: acc
 				| _ -> acc
 			) [] common_types in
 			let common_types = ref (match List.rev dyn_types with [] -> common_types | l -> common_types @ l) in
@@ -877,7 +877,7 @@ let rec type_module_type ctx t tparams p =
 		let mt = try
 			module_type_of_type t
 		with Exit ->
-			if follow t == t_dynamic then Typeload.load_type_def ctx p { tpackage = []; tname = "Dynamic"; tparams = []; tsub = None }
+			if follow t == TDynamic then Typeload.load_type_def ctx p { tpackage = []; tname = "Dynamic"; tparams = []; tsub = None }
 			else error "Invalid module type" p
 		in
 		type_module_type ctx mt None p
@@ -1049,12 +1049,12 @@ let rec acc_get ctx g p =
 			let ecallb = mk (TFunction {
 				tf_args = List.map (fun (o,v) -> v,if o then Some TNull else None) args;
 				tf_type = ret;
-				tf_expr = (match follow ret with | TAbstract ({a_path = [],"Void"},_) -> ecall | _ -> mk (TReturn (Some ecall)) t_dynamic p);
+				tf_expr = (match follow ret with | TAbstract ({a_path = [],"Void"},_) -> ecall | _ -> mk (TReturn (Some ecall)) TDynamic p);
 			}) tcallb p in
 			let ewrap = mk (TFunction {
 				tf_args = [ve,None];
 				tf_type = tcallb;
-				tf_expr = mk (TReturn (Some ecallb)) t_dynamic p;
+				tf_expr = mk (TReturn (Some ecallb)) TDynamic p;
 			}) twrap p in
 			make_call ctx ewrap [e] tcallb p
 		| _ -> assert false)
@@ -1274,7 +1274,7 @@ let rec using_field ctx mode e i p =
 	(* do not try to find using fields if the type is a monomorph, which could lead to side-effects *)
 	let is_dynamic = match follow e.etype with
 		| TMono _ -> raise Not_found
-		| t -> t == t_dynamic
+		| t -> t == TDynamic
 	in
 	let check_constant_struct = ref false in
 	let rec loop = function
@@ -1289,7 +1289,7 @@ let rec using_field ctx mode e i p =
 			let t = map cf.cf_type in
 			begin match follow t with
 				| TFun((_,_,(TType({t_path = ["haxe";"macro"],"ExprOf"},[t0]) | t0)) :: args,r) ->
-					if is_dynamic && follow t0 != t_dynamic then raise Not_found;
+					if is_dynamic && follow t0 != TDynamic then raise Not_found;
 					let e = Codegen.AbstractCast.cast_or_unify_raise ctx t0 e p in
 					(* early constraints check is possible because e.etype has no monomorphs *)
 					List.iter2 (fun m (name,t) -> match follow t with
@@ -1548,11 +1548,11 @@ and type_field ?(resume=false) ctx e i p mode =
 		with Not_found ->
 			if PMap.mem i c.cl_statics then error ("Cannot access static field " ^ i ^ " from a class instance") p;
 			no_field())
-	| TDynamic t ->
+	| TDynamic ->
 		(try
 			using_field ctx mode e i p
 		with Not_found ->
-			AKExpr (mk (TField (e,FDynamic i)) t p))
+			AKExpr (mk (TField (e,FDynamic i)) TDynamic p))
 	| TAnon a ->
 		(try
 			let f = PMap.find i a.a_fields in
@@ -1723,7 +1723,7 @@ let type_bind ctx (e : texpr) params p =
 					let infos = mk_infos ctx p [] in
 					ordered_args @ [type_expr ctx infos (WithType t)]
 				else if ctx.com.config.pf_pad_nulls then
-					(ordered_args @ [(mk (TConst TNull) t_dynamic p)])
+					(ordered_args @ [(mk (TConst TNull) TDynamic p)])
 				else
 					ordered_args
 			in
@@ -1754,9 +1754,9 @@ let type_bind ctx (e : texpr) params p =
 		| TAbstract ({a_path = [],"Void"},_) ->
 			call
 		| TMono _ ->
-			mk (TReturn (Some call)) t_dynamic p;
+			mk (TReturn (Some call)) TDynamic p;
 		| _ ->
-			mk (TReturn (Some call)) t_dynamic p;
+			mk (TReturn (Some call)) TDynamic p;
 	in
 	let func = mk (TFunction {
 		tf_args = List.map (fun (v,o) -> v, if o then Some TNull else None) missing_args;
@@ -1780,7 +1780,7 @@ let type_bind ctx (e : texpr) params p =
 let unify_int ctx e k =
 	let is_dynamic t =
 		match follow t with
-		| TDynamic _ -> true
+		| TDynamic -> true
 		| _ -> false
 	in
 	let is_dynamic_array t =
@@ -1816,7 +1816,7 @@ let unify_int ctx e k =
 		| _ -> false
 	and maybe_dynamic_rec e t =
 		match follow t with
-		| TMono _ | TDynamic _ -> maybe_dynamic_mono e
+		| TMono _ | TDynamic -> maybe_dynamic_mono e
 		(* we might have inferenced a tmono into a single field *)
 		| TAnon a when !(a.a_status) = Opened -> maybe_dynamic_mono e
 		| _ -> false
@@ -2628,7 +2628,7 @@ and type_ident ctx i p mode =
 							AKExpr (type_module_type ctx (TClassDecl c) None p)
 						else begin
 							display_error ctx ("Type parameter " ^ i ^ " is only available at compilation and is not a runtime value") p;
-							AKExpr (mk (TConst TNull) t_dynamic p)
+							AKExpr (mk (TConst TNull) TDynamic p)
 						end
 					with Not_found ->
 						raise (Error(err,p))
@@ -2836,8 +2836,8 @@ and type_access ctx e p mode =
 				apply_params pl tl (loop (TInst (c,stl)))
 			| TInst ({ cl_path = [],"ArrayAccess" },[t]) ->
 				t
-			| TInst ({ cl_path = [],"Array"},[t]) when t == t_dynamic ->
-				t_dynamic
+			| TInst ({ cl_path = [],"Array"},[t]) when t == TDynamic ->
+				TDynamic
 			| TAbstract(a,tl) when Meta.has Meta.ArrayAccess a.a_meta ->
 				loop (apply_params a.a_params tl a.a_this)
 			| _ ->
@@ -2875,7 +2875,7 @@ and type_vars ctx vl p =
 		with
 			Error (e,p) ->
 				display_error ctx (error_msg e) p;
-				add_local ctx v t_dynamic pv, None
+				add_local ctx v TDynamic pv, None
 	) vl in
 	match vl with
 	| [v,eo] ->
@@ -3016,12 +3016,6 @@ and type_object_decl ctx fl with_type p =
 				(match List.fold_left (fun acc t -> match loop true t with ODKPlain -> acc | t -> t :: acc) [] (get_abstract_froms a pl) with
 				| [t] -> t
 				| _ -> ODKPlain)
-			| TDynamic t when (follow t != t_dynamic) ->
-				dynamic_parameter := Some t;
-				ODKWithStructure {
-					a_status = ref Closed;
-					a_fields = PMap.empty;
-				}
 			| TInst(c,tl) when Meta.has Meta.StructInit c.cl_meta ->
 				ODKWithClass(c,tl)
 			| _ ->
@@ -3228,9 +3222,9 @@ and type_try ctx e1 catches with_type p =
 			in
 			begin try
 				begin match follow t,follow v.v_type with
-					| TDynamic _, TDynamic _ ->
+					| TDynamic, TDynamic ->
 						unreachable()
-					| TDynamic _,_ ->
+					| TDynamic,_ ->
 						()
 					| _ ->
 						Type.unify t v.v_type;
@@ -3244,7 +3238,7 @@ and type_try ctx e1 catches with_type p =
 	in
 	let check_catch_type path params =
 		List.iter (fun pt ->
-			if pt != t_dynamic then error "Catch class parameter must be Dynamic" p;
+			if pt != TDynamic then error "Catch class parameter must be Dynamic" p;
 		) params;
 		(match path with
 		| x :: _ , _ -> x
@@ -3262,7 +3256,7 @@ and type_try ctx e1 catches with_type p =
 				check_catch_type a.a_path params,t
 			| TAbstract(a,tl) when not (Meta.has Meta.CoreType a.a_meta) ->
 				loop (Abstract.get_underlying_type a tl)
-			| TDynamic _ -> "",t
+			| TDynamic -> "",t
 			| _ -> error "Catch type must be a class, an enum or Dynamic" (pos e)
 		in
 		let name,t2 = loop t in
@@ -3347,7 +3341,7 @@ and type_map_declaration ctx e1 el with_type p =
 	let ef = mk (TField(ec,FStatic(c,cf))) (tfun [tkey;tval] ctx.t.tvoid) p in
 	let el = ev :: List.map2 (fun e1 e2 -> (make_call ctx ef [ev;e1;e2] ctx.com.basic.tvoid p)) el_k el_v in
 	let enew = mk (TNew(c,[tkey;tval],[])) tmap p in
-	let el = (mk (TVar (v,Some enew)) t_dynamic p) :: (List.rev el) in
+	let el = (mk (TVar (v,Some enew)) TDynamic p) :: (List.rev el) in
 	mk (TBlock el) tmap p
 
 and type_local_function ctx name f with_type p =
@@ -3461,7 +3455,7 @@ and type_array_decl ctx el with_type p =
 				| [t] -> Some t
 				| _ -> None)
 			| t ->
-				if t == t_dynamic then Some t else None)
+				if t == TDynamic then Some t else None)
 		in
 		loop t
 	| _ ->
@@ -3473,7 +3467,7 @@ and type_array_decl ctx el with_type p =
 		let t = try
 			unify_min_raise ctx el
 		with Error (Unify l,p) ->
-			if ctx.untyped then t_dynamic else begin
+			if ctx.untyped then TDynamic else begin
 				display_error ctx "Arrays of mixed types are only allowed if the type is forced to Array<Dynamic>" p;
 				raise (Error (Unify l, p))
 			end
@@ -3577,7 +3571,7 @@ and type_expr ctx (e,p) (with_type:with_type) =
 			let i = add_local ctx i pt pi in
 			let e1 = (match follow e1.etype with
 			| TMono _
-			| TDynamic _ ->
+			| TDynamic ->
 				display_error ctx "You can't iterate on a Dynamic value, please specify Iterator or Iterable" e1.epos;
 				e1
 			| TLazy _ ->
@@ -3593,7 +3587,7 @@ and type_expr ctx (e,p) (with_type:with_type) =
 					with Error (Unify(l),p) ->
 						display_error ctx "Field iterator has an invalid type" acc.epos;
 						display_error ctx (error_msg (Unify l)) p;
-						mk (TConst TNull) t_dynamic p
+						mk (TConst TNull) TDynamic p
 				)
 			) in
 			if display then ignore(handle_display ctx (EConst(Ident i.v_name),i.v_pos) false (WithType i.v_type));
@@ -3661,7 +3655,7 @@ and type_expr ctx (e,p) (with_type:with_type) =
 			| None ->
 				let v = ctx.t.tvoid in
 				unify ctx v ctx.ret p;
-				mk (TReturn None) t_dynamic p
+				mk (TReturn None) TDynamic p
 			| Some e ->
 				let e = type_expr ctx e (WithType ctx.ret) in
 				let e = Codegen.AbstractCast.cast_or_unify ctx ctx.ret e p in
@@ -3670,18 +3664,18 @@ and type_expr ctx (e,p) (with_type:with_type) =
 					(* if we get a Void expression (e.g. from inlining) we don't want to return it (issue #4323) *)
 					mk (TBlock [
 						e;
-						mk (TReturn None) t_dynamic p
-					]) t_dynamic e.epos;
+						mk (TReturn None) TDynamic p
+					]) TDynamic e.epos;
 				| _ ->
-					mk (TReturn (Some e)) t_dynamic p
+					mk (TReturn (Some e)) TDynamic p
 				end
 		end
 	| EBreak ->
 		if not ctx.in_loop then display_error ctx "Break outside loop" p;
-		mk TBreak t_dynamic p
+		mk TBreak TDynamic p
 	| EContinue ->
 		if not ctx.in_loop then display_error ctx "Continue outside loop" p;
-		mk TContinue t_dynamic p
+		mk TContinue TDynamic p
 	| ETry (e1,[]) ->
 		type_expr ctx e1 with_type
 	| ETry (e1,catches) ->
@@ -3715,7 +3709,7 @@ and type_expr ctx (e,p) (with_type:with_type) =
 		let t = Typeload.load_complex_type ctx true p t in
 		let check_param pt = match follow pt with
 			| TMono _ -> () (* This probably means that Dynamic wasn't bound (issue #4675). *)
-			| t when t == t_dynamic -> ()
+			| t when t == TDynamic -> ()
 			| _ ->error "Cast type parameters must be Dynamic" p
 		in
 		let rec loop t = match follow t with
@@ -3814,7 +3808,7 @@ and handle_display ctx e_ast iscall with_type =
 	with Error (Unknown_ident n,_) when not iscall ->
 		raise (Parser.TypePath ([n],None,false))
 	| Error (Unknown_ident "trace",_) ->
-		raise (Display.DisplaySignatures [(tfun [t_dynamic] ctx.com.basic.tvoid,Some "Print given arguments")])
+		raise (Display.DisplaySignatures [(tfun [TDynamic] ctx.com.basic.tvoid,Some "Print given arguments")])
 	| Error (Type_not_found (path,_),_) as err ->
 		begin try
 			raise (Display.DisplayFields (get_submodule_fields path))
@@ -4059,7 +4053,7 @@ and handle_display ctx e_ast iscall with_type =
 									List.iter (fun tc -> unify_raise ctx m (map tc) e.epos) constr
 								| _ -> ()
 							) monos f.cf_params;
-							if not (can_access ctx c f true) || follow e.etype == t_dynamic && follow t != t_dynamic then
+							if not (can_access ctx c f true) || follow e.etype == TDynamic && follow t != TDynamic then
 								()
 							else begin
 								let f = prepare_using_field f in
@@ -4087,7 +4081,7 @@ and handle_display ctx e_ast iscall with_type =
 			let rec loop t = match follow t with
 				| TFun _ -> t
 				| TAbstract(a,tl) when Meta.has Meta.Callable a.a_meta -> loop (Abstract.get_underlying_type a tl)
-				| _ -> t_dynamic
+				| _ -> TDynamic
 			in
 			loop e.etype
 		else
@@ -4110,7 +4104,7 @@ and handle_display ctx e_ast iscall with_type =
 				raise (Display.DisplayFields fields)
 		in
 		(match follow t with
-		| TMono _ | TDynamic _ when ctx.in_macro -> mk (TConst TNull) t p
+		| TMono _ | TDynamic when ctx.in_macro -> mk (TConst TNull) t p
 		| _ -> raise (Display.DisplaySignatures ((t,doc) :: tl_overloads)))
 
 and maybe_type_against_enum ctx f with_type p =
@@ -4171,7 +4165,7 @@ and type_call ctx e el (with_type:with_type) p =
 				begin match follow e.etype with
 					| TInst({cl_path=[],"String"},_) -> raise Not_found
 					| TMono _ -> raise Not_found
-					| TDynamic _ -> raise Not_found
+					| TDynamic -> raise Not_found
 					| _ -> ()
 				end;
 				let acc = type_field ~resume:true ctx e "toString" p MCall in
@@ -4179,8 +4173,8 @@ and type_call ctx e el (with_type:with_type) p =
 			with Not_found ->
 				e
 			in
-			let v_trace = alloc_unbound_var "`trace" t_dynamic p in
-			mk (TCall (mk (TLocal v_trace) t_dynamic p,[e;infos])) ctx.t.tvoid p
+			let v_trace = alloc_unbound_var "`trace" TDynamic p in
+			mk (TCall (mk (TLocal v_trace) TDynamic p,[e;infos])) ctx.t.tvoid p
 		else
 			type_expr ctx (ECall ((EField ((EField ((EConst (Ident "haxe"),p),"Log"),p),"trace"),p),[mk_to_string_meta e;infos]),p) NoValue
 	| (EConst(Ident "callback"),p1),args ->
@@ -4371,8 +4365,8 @@ and build_call ctx acc el (with_type:with_type) p =
 			mk (TCall (e,el)) t p
 		| t ->
 			let el = List.map (fun e -> type_expr ctx e Value) el in
-			let t = if t == t_dynamic then
-				t_dynamic
+			let t = if t == TDynamic then
+				TDynamic
 			else if ctx.untyped then
 				mk_mono()
 			else
@@ -5090,10 +5084,10 @@ let type_macro ctx mode cpath f (el:Ast.expr list) p =
 			force default parameter types to haxe.macro.Expr, and if success allow to pass any value type since it will be encoded
 		*)
 		let eargs = List.map (fun (n,o,t) ->
-			try unify_raise mctx t expr p; (n, o, t_dynamic), MAExpr
+			try unify_raise mctx t expr p; (n, o, TDynamic), MAExpr
 			with Error (Unify _,_) -> match follow t with
 				| TFun _ ->
-					(n,o,t_dynamic), MAFunction
+					(n,o,TDynamic), MAFunction
 				| _ ->
 					(n,o,t), MAOther
 			) margs in
@@ -5122,7 +5116,7 @@ let type_macro ctx mode cpath f (el:Ast.expr list) p =
 			incr index;
 			(EArray ((EArrayDecl [e],p),(EConst (Int (string_of_int (!index))),p)),p)
 		) el in
-		let elt, _ = unify_call_args mctx constants (List.map fst eargs) t_dynamic p false false in
+		let elt, _ = unify_call_args mctx constants (List.map fst eargs) TDynamic p false false in
 		List.iter (fun f -> f()) (!todo);
 		List.map2 (fun (_,mct) e ->
 			let e, et = (match e.eexpr with
@@ -5217,7 +5211,7 @@ let type_macro ctx mode cpath f (el:Ast.expr list) p =
 
 let call_macro ctx path meth args p =
 	let mctx, (margs,_,mclass,mfield), call = load_macro ctx false path meth p in
-	let el, _ = unify_call_args mctx args margs t_dynamic p false false in
+	let el, _ = unify_call_args mctx args margs TDynamic p false false in
 	call (List.map (fun e -> try Interp.make_const e with Exit -> error "Parameter should be a constant" e.epos) el)
 
 let call_init_macro ctx e =

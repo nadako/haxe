@@ -211,7 +211,7 @@ module Graph = struct
 		} in
 		DynArray.add g.g_var_infos vi;
 		let i = DynArray.length g.g_var_infos - 1 in
-		v.v_extra <- Some([],Some (mk (TConst (TInt (Int32.of_int i))) t_dynamic null_pos))
+		v.v_extra <- Some([],Some (mk (TConst (TInt (Int32.of_int i))) TDynamic null_pos))
 
 	let get_var_info g v = match v.v_extra with
 		| Some(_,Some {eexpr = TConst (TInt i32)}) -> DynArray.get g.g_var_infos (Int32.to_int i32)
@@ -296,7 +296,7 @@ module Graph = struct
 
 	let create t p =
 		let bb_root = BasicBlock._create 1 BKRoot t p; in
-		let bb_unreachable = BasicBlock._create 0 BKUnreachable t_dynamic null_pos in
+		let bb_unreachable = BasicBlock._create 0 BKUnreachable TDynamic null_pos in
 		{
 			g_root = bb_root;
 			g_exit = bb_unreachable;

@@ -2602,7 +2602,7 @@ let macro_lib =
 					| Some t -> t)
 				| TAbstract (a,tl) when not (Ast.Meta.has Ast.Meta.CoreType a.a_meta) ->
 					Abstract.get_underlying_type a tl
-				| TAbstract _ | TEnum _ | TInst _ | TFun _ | TAnon _ | TDynamic _ ->
+				| TAbstract _ | TEnum _ | TInst _ | TFun _ | TAnon _ | TDynamic ->
 					t
 				| TType (t,tl) ->
 					apply_params t.t_params tl t.t_type
@@ -2619,7 +2619,7 @@ let macro_lib =
 					(match !r with
 					| None -> t
 					| Some t -> t)
-				| TAbstract _ | TEnum _ | TInst _ | TFun _ | TAnon _ | TDynamic _ ->
+				| TAbstract _ | TEnum _ | TInst _ | TFun _ | TAnon _ | TDynamic ->
 					t
 				| TType (t,tl) ->
 					apply_params t.t_params tl t.t_type
@@ -4675,11 +4675,8 @@ and encode_type t =
 			4 , [enc_array pl; encode_type ret]
 		| TAnon a ->
 			5, [encode_ref a encode_tanon (fun() -> "<anonymous>")]
-		| TDynamic tsub as t ->
-			if t == t_dynamic then
-				6, [VNull]
-			else
-				6, [encode_type tsub]
+		| TDynamic ->
+			6, []
 		| TLazy f ->
 			loop (!f())
 		| TAbstract (a, pl) ->
@@ -4709,8 +4706,7 @@ and decode_type t =
 	| 3, [t; pl] -> TType (decode_ref t, List.map decode_type (dec_array pl))
 	| 4, [pl; r] -> TFun (List.map (fun p -> dec_string (field p "name"), dec_bool (field p "opt"), decode_type (field p "t")) (dec_array pl), decode_type r)
 	| 5, [a] -> TAnon (decode_ref a)
-	| 6, [VNull] -> t_dynamic
-	| 6, [t] -> TDynamic (decode_type t)
+	| 6, [] -> TDynamic
 	| 7, [VAbstract (ALazyType f)] -> TLazy f
 	| 8, [a; pl] -> TAbstract (decode_ref a, List.map decode_type (dec_array pl))
 	| _ -> raise Invalid_expr

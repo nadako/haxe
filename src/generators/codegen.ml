@@ -75,7 +75,7 @@ let rec type_constant_value com (e,p) =
 	| EObjectDecl el ->
 		mk (TObjectDecl (List.map (fun (n,e) -> n, type_constant_value com e) el)) (TAnon { a_fields = PMap.empty; a_status = ref Closed }) p
 	| EArrayDecl el ->
-		mk (TArrayDecl (List.map (type_constant_value com) el)) (com.basic.tarray t_dynamic) p
+		mk (TArrayDecl (List.map (type_constant_value com) el)) (com.basic.tarray TDynamic) p
 	| _ ->
 		error "Constant value expected" p
 
@@ -161,11 +161,11 @@ let build_metadata com t =
 		mk (TObjectDecl (List.map (fun (f,el,p) ->
 			if Hashtbl.mem h f then error ("Duplicate metadata '" ^ f ^ "'") p;
 			Hashtbl.add h f ();
-			f, mk (match el with [] -> TConst TNull | _ -> TArrayDecl (List.map (type_constant_value com) el)) (api.tarray t_dynamic) p
-		) ml)) t_dynamic p
+			f, mk (match el with [] -> TConst TNull | _ -> TArrayDecl (List.map (type_constant_value com) el)) (api.tarray TDynamic) p
+		) ml)) TDynamic p
 	in
 	let make_meta l =
-		mk (TObjectDecl (List.map (fun (f,ml) -> f,make_meta_field ml) l)) t_dynamic p
+		mk (TObjectDecl (List.map (fun (f,ml) -> f,make_meta_field ml) l)) TDynamic p
 	in
 	if meta = [] && fields = [] && statics = [] then
 		None
@@ -174,7 +174,7 @@ let build_metadata com t =
 		let meta_obj = (if fields = [] then meta_obj else ("fields",make_meta fields) :: meta_obj) in
 		let meta_obj = (if statics = [] then meta_obj else ("statics",make_meta statics) :: meta_obj) in
 		let meta_obj = (try ("obj", make_meta_field (List.assoc "" meta)) :: meta_obj with Not_found -> meta_obj) in
-		Some (mk (TObjectDecl meta_obj) t_dynamic p)
+		Some (mk (TObjectDecl meta_obj) TDynamic p)
 
 (* -------------------------------------------------------------------------- *)
 (* ABSTRACT CASTS *)
@@ -341,7 +341,7 @@ module AbstractCast = struct
 						(Hashtbl.find relevant n) t
 					with Not_found ->
 						if not (has_mono t) then t
-						else t_dynamic
+						else TDynamic
 				) a.a_params pl in
 				if com.platform = Js && a.a_path = ([],"Map") then begin match tl with
 					| t1 :: _ ->
@@ -538,11 +538,8 @@ let update_cache_dependencies t =
 			| _ -> ())
 		| TLazy f ->
 			check_t m (!f())
-		| TDynamic t ->
-			if t == t_dynamic then
-				()
-			else
-				check_t m t
+		| TDynamic ->
+			()
 	and check_field m cf =
 		check_t m cf.cf_type
 	in
@@ -979,7 +976,7 @@ let default_cast ?(vtmp="$t") com e texpr t p =
 			assert false
 	) in
 	let std = mk (TTypeExpr std) (mk_texpr std) p in
-	let is = mk (TField (std,fis)) (tfun [t_dynamic;t_dynamic] api.tbool) p in
+	let is = mk (TField (std,fis)) (tfun [TDynamic;TDynamic] api.tbool) p in
 	let is = mk (TCall (is,[vexpr;texpr])) api.tbool p in
 	let exc = mk (TThrow (mk (TConst (TString "Class cast error")) api.tstring p)) t p in
 	let check = mk (TIf (mk_parent is,mk (TCast (vexpr,None)) t p,Some exc)) t p in
@@ -1004,9 +1001,9 @@ struct
 			simplify_t (apply_params t.t_params tl t.t_type)
 		| TMono r -> (match !r with
 			| Some t -> simplify_t t
-			| None -> t_dynamic)
-		| TAnon _ -> t_dynamic
-		| TDynamic _ -> t
+			| None -> TDynamic)
+		| TAnon _ -> TDynamic
+		| TDynamic -> t
 		| TLazy f -> simplify_t (!f())
 		| TFun _ -> t
 
@@ -1059,13 +1056,13 @@ struct
 		| TEnum(ef,tlf), TEnum(ea, tla) ->
 			if ef != ea then raise Not_found;
 			(cacc, rate_tp tlf tla)
-		| TDynamic _, TDynamic _ ->
+		| TDynamic, TDynamic ->
 			(cacc, 0)
-		| TDynamic _, _ ->
+		| TDynamic, _ ->
 			(max_int, 0) (* a function with dynamic will always be worst of all *)
-		| TAbstract(a, _), TDynamic _ when Meta.has Meta.CoreType a.a_meta ->
+		| TAbstract(a, _), TDynamic when Meta.has Meta.CoreType a.a_meta ->
 			(cacc + 2, 0) (* a dynamic to a basic type will have an "unboxing" penalty *)
-		| _, TDynamic _ ->
+		| _, TDynamic ->
 			(cacc + 1, 0)
 		| TAbstract(af,tlf), TAbstract(aa,tla) ->
 			(if af == aa then
@@ -1200,7 +1197,7 @@ module UnificationCallback = struct
 		| TFun(args,_) ->
 			check_call_params f el args
 		| _ ->
-			List.map (fun e -> f e t_dynamic) el
+			List.map (fun e -> f e TDynamic) el
 
 	let rec run ff e =
 		let f e t =

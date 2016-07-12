@@ -761,7 +761,7 @@ let rec to_type ?tref ctx t =
 				Array.iteri (fun i (n,_,_) -> vp.vindex <- PMap.add n i vp.vindex) vp.vfields;
 				t
 		)
-	| TDynamic _ ->
+	| TDynamic ->
 		HDyn
 	| TEnum (e,_) ->
 		enum_type ~tref ctx e
@@ -830,7 +830,7 @@ and field_type ctx f p =
 		in
 		(loop creal).cf_type
 	| FStatic (_,f) | FAnon f | FClosure (_,f) -> f.cf_type
-	| FDynamic _ -> t_dynamic
+	| FDynamic _ -> TDynamic
 	| FEnum (_,f) -> f.ef_type
 
 and real_type ctx e =
@@ -1993,7 +1993,7 @@ and eval_expr ctx e =
 		| _ ->
 			let r = alloc_tmp ctx HDynObj in
 			op ctx (ONew r);
-			let a = (match follow e.etype with TAnon a -> Some a | t -> if t == t_dynamic then None else assert false) in
+			let a = (match follow e.etype with TAnon a -> Some a | t -> if t == TDynamic then None else assert false) in
 			List.iter (fun (s,ev) ->
 				let ft = (try (match a with None -> raise Not_found | Some a -> PMap.find s a.a_fields).cf_type with Not_found -> ev.etype) in
 				let v = eval_to ctx ev (to_type ctx ft) in
@@ -2520,7 +2520,7 @@ and eval_expr ctx e =
 				[]
 			| (v,ec) :: next ->
 				let rv = alloc_reg ctx v in
-				let jnext = if v.v_type == t_dynamic then begin
+				let jnext = if v.v_type == TDynamic then begin
 					op ctx (OMov (rv, rtrap));
 					(fun() -> ())
 				end else
@@ -2539,7 +2539,7 @@ and eval_expr ctx e =
 				in
 				let r = eval_expr ctx ec in
 				if tret <> HVoid then op ctx (OMov (result,cast_to ctx r tret ec.epos));
-				if v.v_type == t_dynamic then [] else
+				if v.v_type == TDynamic then [] else
 				let jend = jump ctx (fun n -> OJAlways n) in
 				jnext();
 				jend :: loop next
@@ -3119,7 +3119,7 @@ let generate_static_init ctx =
 				match f.cf_kind, f.cf_expr with
 				| Var _, Some e ->
 					let p = e.epos in
-					let e = mk (TBinop (OpAssign,(mk (TField (mk (TTypeExpr t) t_dynamic p,FStatic (c,f))) f.cf_type p), e)) f.cf_type p in
+					let e = mk (TBinop (OpAssign,(mk (TField (mk (TTypeExpr t) TDynamic p,FStatic (c,f))) f.cf_type p), e)) f.cf_type p in
 					exprs := e :: !exprs;
 				| _ ->
 					()

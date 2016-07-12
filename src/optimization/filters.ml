@@ -34,7 +34,7 @@ let rec add_final_return e =
 				| TAbstract ({ a_path = [],"Bool" },_) -> TBool false
 				| _ -> TNull
 			) in
-			{ eexpr = TReturn (Some { eexpr = TConst c; epos = p; etype = t }); etype = t_dynamic; epos = p }
+			{ eexpr = TReturn (Some { eexpr = TConst c; epos = p; etype = t }); etype = TDynamic; epos = p }
 		in
 		match e.eexpr with
 		| TBlock el ->
@@ -74,9 +74,9 @@ let rec wrap_js_exceptions com e =
 			let terr = List.find (fun mt -> match mt with TClassDecl {cl_path = ["js";"_Boot"],"HaxeError"} -> true | _ -> false) com.types in
 			let cerr = match terr with TClassDecl c -> c | _ -> assert false in
 			(match eerr.etype with
-			| TDynamic _ ->
+			| TDynamic ->
 				let eterr = Codegen.ExprBuilder.make_static_this cerr e.epos in
-				let ewrap = Codegen.fcall eterr "wrap" [eerr] t_dynamic e.epos in
+				let ewrap = Codegen.fcall eterr "wrap" [eerr] TDynamic e.epos in
 				{ e with eexpr = TThrow ewrap }
 			| _ ->
 				let ewrap = { eerr with eexpr = TNew (cerr,[],[eerr]); etype = TInst (cerr,[]) } in
@@ -542,7 +542,7 @@ let rename_local_vars ctx e =
 		| TEnum (e,_) -> check (TEnumDecl e)
 		| TType (t,_) -> check (TTypeDecl t)
 		| TAbstract (a,_) -> check (TAbstractDecl a)
-		| TMono _ | TLazy _ | TAnon _ | TDynamic _ | TFun _ -> ()
+		| TMono _ | TLazy _ | TAnon _ | TDynamic | TFun _ -> ()
 	in
 	let rec collect e = match e.eexpr with
  		| TVar(v,eo) ->
@@ -895,7 +895,7 @@ let add_meta_field ctx t = match t with
 		| None -> ()
 		| Some e ->
 			add_feature ctx.com "has_metadata";
-			let f = mk_field "__meta__" t_dynamic c.cl_pos in
+			let f = mk_field "__meta__" TDynamic c.cl_pos in
 			f.cf_expr <- Some e;
 			let can_deal_with_interface_metadata () = match ctx.com.platform with
 				| Flash when Common.defined ctx.com Define.As3 -> false

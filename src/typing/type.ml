@@ -52,7 +52,7 @@ type t =
 	| TType of tdef * tparams
 	| TFun of (string * bool * t) list * t
 	| TAnon of tanon
-	| TDynamic of t
+	| TDynamic
 	| TLazy of (unit -> t) ref
 	| TAbstract of tabstract * tparams
 
@@ -337,8 +337,6 @@ let null t p = mk (TConst TNull) t p
 
 let mk_mono() = TMono (ref None)
 
-let rec t_dynamic = TDynamic t_dynamic
-
 let tfun pl r = TFun (List.map (fun t -> "",false,t) pl,r)
 
 let fun_args l = List.map (fun (a,c,t) -> a, c <> None, t) l
@@ -412,7 +410,7 @@ let null_class =
 	c.cl_private <- true;
 	c
 
-let null_field = mk_field "" t_dynamic Ast.null_pos
+let null_field = mk_field "" TDynamic Ast.null_pos
 
 let null_abstract = {
 	a_path = ([],"");
@@ -425,7 +423,7 @@ let null_abstract = {
 	a_ops = [];
 	a_unops = [];
 	a_impl = None;
-	a_this = t_dynamic;
+	a_this = TDynamic;
 	a_from = [];
 	a_from_field = [];
 	a_to = [];
@@ -489,8 +487,8 @@ let map loop t =
 		let ft = !f() in
 		let ft2 = loop ft in
 		if ft == ft2 then t else ft2
-	| TDynamic t2 ->
-		if t == t2 then	t else TDynamic (loop t2)
+	| TDynamic ->
+		t
 
 let dup t =
 	let monos = ref [] in
@@ -578,11 +576,8 @@ let apply_params cparams params t =
 				t
 			else
 				ft2
-		| TDynamic t2 ->
-			if t == t2 then
-				t
-			else
-				TDynamic (loop t2)
+		| TDynamic ->
+			t
 	in
 	loop t
 
@@ -658,7 +653,7 @@ let rec has_mono t = match t with
 		(match !r with None -> true | Some t -> has_mono t)
 	| TInst(_,pl) | TEnum(_,pl) | TAbstract(_,pl) | TType(_,pl) ->
 		List.exists has_mono pl
-	| TDynamic _ ->
+	| TDynamic ->
 		false
 	| TFun(args,r) ->
 		has_mono r || List.exists (fun (_,_,t) -> has_mono t) args
@@ -819,7 +814,7 @@ let quick_field t n =
 			end
 		| _ ->
 			FAnon (PMap.find n a.a_fields))
-	| TDynamic _ ->
+	| TDynamic ->
 		FDynamic n
 	| TEnum _  | TMono _ | TAbstract _ | TFun _ ->
 		raise Not_found
@@ -856,7 +851,7 @@ let rec s_type_kind t =
 	| TAbstract(a,tl) -> Printf.sprintf "TAbstract(%s, [%s])" (s_type_path a.a_path) (map tl)
 	| TFun(tl,r) -> Printf.sprintf "TFun([%s], %s)" (String.concat ", " (List.map (fun (n,b,t) -> Printf.sprintf "%s%s:%s" (if b then "?" else "") n (s_type_kind t)) tl)) (s_type_kind r)
 	| TAnon an -> "TAnon"
-	| TDynamic t2 -> "TDynamic"
+	| TDynamic -> "TDynamic"
 	| TLazy _ -> "TLazy"
 
 let s_module_type_kind = function
@@ -890,8 +885,8 @@ let rec s_type ctx t =
 	| TAnon a ->
 		let fl = PMap.fold (fun f acc -> ((if Meta.has Meta.Optional f.cf_meta then " ?" else " ") ^ f.cf_name ^ " : " ^ s_type ctx f.cf_type) :: acc) a.a_fields [] in
 		"{" ^ (if not (is_closed a) then "+" else "") ^  String.concat "," fl ^ " }"
-	| TDynamic t2 ->
-		"Dynamic" ^ s_type_params ctx (if t == t2 then [] else [t2])
+	| TDynamic ->
+		"Dynamic"
 	| TLazy f ->
 		s_type ctx (!f())
 
@@ -1374,11 +1369,7 @@ let rec link e a b =
 		| TEnum (_,tl) -> List.exists loop tl
 		| TInst (_,tl) | TType (_,tl) | TAbstract (_,tl) -> List.exists loop tl
 		| TFun (tl,t) -> List.exists (fun (_,_,t) -> loop t) tl || loop t
-		| TDynamic t2 ->
-			if t == t2 then
-				false
-			else
-				loop t2
+		| TDynamic -> false
 		| TLazy f ->
 			loop (!f())
 		| TAnon a ->
@@ -1391,7 +1382,7 @@ let rec link e a b =
 	(* tell is already a ~= b *)
 	if loop b then
 		(follow b) == a
-	else if b == t_dynamic then
+	else if b == TDynamic then
 		true
 	else begin
 		e := Some b;
@@ -1399,8 +1390,8 @@ let rec link e a b =
 	end
 
 let link_dynamic a b = match follow a,follow b with
-	| TMono r,TDynamic _ -> r := Some b
-	| TDynamic _,TMono r -> r := Some a
+	| TMono r,TDynamic -> r := Some b
+	| TDynamic,TMono r -> r := Some a
 	| _ -> ()
 
 let rec fast_eq a b =
@@ -1567,8 +1558,8 @@ let rec type_eq param a b =
 			) l1 l2
 		with
 			Unify_error l -> error (cannot_unify a b :: l))
-	| TDynamic a , TDynamic b ->
-		type_eq param a b
+	| TDynamic , TDynamic ->
+		()
 	| TAbstract (a1,tl1) , TAbstract (a2,tl2) ->
 		if a1 != a2 && not (param = EqCoreType && a1.a_path = a2.a_path) then error [cannot_unify a b];
 		List.iter2 (type_eq param) tl1 tl2
@@ -1605,9 +1596,9 @@ let rec type_eq param a b =
 		with
 			Unify_error l -> error (cannot_unify a b :: l))
 	| _ , _ ->
-		if b == t_dynamic && (param = EqRightDynamic || param = EqBothDynamic) then
+		if b == TDynamic && (param = EqRightDynamic || param = EqBothDynamic) then
 			()
-		else if a == t_dynamic && param = EqBothDynamic then
+		else if a == TDynamic && param = EqBothDynamic then
 			()
 		else
 			error [cannot_unify a b]
@@ -1837,48 +1828,9 @@ let rec unify a b =
 		with Not_found ->
 			error [has_no_field a "new"]
 		end
-	| TDynamic t , _ ->
-		if t == a then
-			()
-		else (match b with
-		| TDynamic t2 ->
-			if t2 != b then
-				(try
-					type_eq EqRightDynamic t t2
-				with
-					Unify_error l -> error (cannot_unify a b :: l));
-		| TAbstract(bb,tl) when (List.exists (unify_from bb tl a b) bb.a_from) ->
-			()
-		| _ ->
-			error [cannot_unify a b])
-	| _ , TDynamic t ->
-		if t == b then
-			()
-		else (match a with
-		| TDynamic t2 ->
-			if t2 != a then
-				(try
-					type_eq EqRightDynamic t t2
-				with
-					Unify_error l -> error (cannot_unify a b :: l));
-		| TAnon an ->
-			(try
-				(match !(an.a_status) with
-				| Statics _ | EnumStatics _ -> error []
-				| Opened -> an.a_status := Closed
-				| _ -> ());
-				PMap.iter (fun _ f ->
-					try
-						type_eq EqStrict (field_type f) t
-					with Unify_error l ->
-						error (invalid_field f.cf_name :: l)
-				) an.a_fields
-			with Unify_error l ->
-				error (cannot_unify a b :: l))
-		| TAbstract(aa,tl) when (List.exists (unify_to aa tl b) aa.a_to) ->
-			()
-		| _ ->
-			error [cannot_unify a b])
+	| TDynamic, _
+	| _ , TDynamic ->
+		()
 	| TAbstract (aa,tl), _  ->
 		if not (List.exists (unify_to aa tl b) aa.a_to) then error [cannot_unify a b];
 	| TInst ({ cl_kind = KTypeParameter ctl } as c,pl), TAbstract (bb,tl) ->
@@ -2084,16 +2036,16 @@ module Abstract = struct
 	open Ast
 
 	let find_to ab pl b =
-		if follow b == t_dynamic then
-			List.find (fun (t,_) -> follow t == t_dynamic) ab.a_to_field
+		if follow b == TDynamic then
+			List.find (fun (t,_) -> follow t == TDynamic) ab.a_to_field
 		else if List.exists (unify_to ab pl ~allow_transitive_cast:false b) ab.a_to then
 			raise Not_found (* legacy compatibility *)
 		else
 			List.find (unify_to_field ab pl b) ab.a_to_field
 
 	let find_from ab pl a b =
-		if follow a == t_dynamic then
-			List.find (fun (t,_) -> follow t == t_dynamic) ab.a_from_field
+		if follow a == TDynamic then
+			List.find (fun (t,_) -> follow t == TDynamic) ab.a_from_field
 		else if List.exists (unify_from ab pl a ~allow_transitive_cast:false b) ab.a_from then
 			raise Not_found (* legacy compatibility *)
 		else
@@ -2137,7 +2089,7 @@ module Abstract = struct
 			maybe_recurse (follow m)
 		with Not_found ->
 			if Meta.has Meta.CoreType a.a_meta then
-				t_dynamic
+				TDynamic
 			else
 				maybe_recurse (apply_params a.a_params pl a.a_this)
 
@@ -2413,8 +2365,8 @@ module TExprToExpr = struct
 					} :: acc
 				) a.a_fields [])
 			end
-		| (TDynamic t2) as t ->
-			tpath ([],"Dynamic") ([],"Dynamic") (if t == t_dynamic then [] else [convert_type' t2])
+		| TDynamic ->
+			tpath ([],"Dynamic") ([],"Dynamic") []
 		| TLazy f ->
 			convert_type ((!f)())
 

@@ -121,7 +121,7 @@ let rec gen_type ?(values=None) t =
 		) args in
 		node "f" (("a",names) :: values) (List.map gen_type (args @ [r]))
 	| TAnon a -> node "a" [] (pmap (fun f -> gen_field [] { f with cf_public = false }) a.a_fields)
-	| TDynamic t2 -> node "d" [] (if t == t2 then [] else [gen_type t2])
+	| TDynamic -> node "d" [] []
 	| TLazy f -> gen_type (!f())
 
 and gen_type_decl n t pl =
@@ -380,8 +380,8 @@ let generate_type com t =
 			"{" ^ String.concat ", " fields ^ "}"
 		| TLazy f ->
 			stype ((!f)())
-		| TDynamic t2 ->
-			if t == t2 then "Dynamic" else "Dynamic<" ^ stype t2 ^ ">"
+		| TDynamic ->
+			"Dynamic"
 		| TFun ([],ret) ->
 			"Void -> " ^ ftype ret
 		| TFun (args,ret) ->

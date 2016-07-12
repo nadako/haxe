@@ -343,7 +343,7 @@ let is_dynamic_iterator ctx e =
 			| TInst ({ cl_path = [],"Array" },_)
 			| TInst ({ cl_kind = KTypeParameter _}, _)
 			| TAnon _
-			| TDynamic _
+			| TDynamic
 			| TMono _ ->
 				true
 			| TAbstract(a,tl) when not (Meta.has Meta.CoreType a.a_meta) ->
@@ -704,7 +704,7 @@ and gen_expr ctx e =
 				try
 					List.iter (fun (v,e) ->
 						match follow v.v_type with
-						| TDynamic _ -> (* Dynamic catch - unrap if the catch value is used *)
+						| TDynamic -> (* Dynamic catch - unrap if the catch value is used *)
 							let rec loop e = match e.eexpr with
 							| TLocal v2 when v2 == v -> raise Exit
 							| _ -> Type.iter loop e
@@ -735,7 +735,7 @@ and gen_expr ctx e =
 			| TAnon _ ->
 				assert false
 			| TMono _
-			| TDynamic _ ->
+			| TDynamic ->
 				None
 			) in
 			match t with
@@ -840,13 +840,13 @@ and gen_value ctx e =
 	add_mapping ctx false e;
 	let assign e =
 		mk (TBinop (Ast.OpAssign,
-			mk (TLocal (match ctx.in_value with None -> assert false | Some v -> v)) t_dynamic e.epos,
+			mk (TLocal (match ctx.in_value with None -> assert false | Some v -> v)) TDynamic e.epos,
 			e
 		)) e.etype e.epos
 	in
 	let value() =
 		let old = ctx.in_value, ctx.in_loop in
-		let r = alloc_var "$r" t_dynamic e.epos in
+		let r = alloc_var "$r" TDynamic e.epos in
 		ctx.in_value <- Some r;
 		ctx.in_loop <- false;
 		spr ctx "(function($this) ";

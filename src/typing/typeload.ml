@@ -190,7 +190,7 @@ let module_pass_1 ctx m tdecls loadp =
 			decls := (TAbstractDecl a, decl) :: !decls;
 			match d.d_data with
 			| [] when Meta.has Meta.CoreType a.a_meta ->
-				a.a_this <- t_dynamic;
+				a.a_this <- TDynamic;
 				acc
 			| fields ->
 				let a_t =
@@ -439,11 +439,7 @@ let rec load_instance ?(allow_display=false) ctx (t,pn) allow_no_params p =
 				| _ -> assert false
 			) types;
 			f (!pl)
-		end else if path = ([],"Dynamic") then
-			match t.tparams with
-			| [] -> t_dynamic
-			| [TPType t] -> TDynamic (load_complex_type ctx false p t)
-			| _ -> error "Too many parameters for Dynamic" p
+		end else if path = ([],"Dynamic") then TDynamic
 		else begin
 			if not is_rest && ctx.com.display = DMNone && List.length types <> List.length t.tparams then error ("Invalid number of type parameters for " ^ s_type_path path) p;
 			let tparams = List.map (fun t ->
@@ -776,7 +772,7 @@ let load_type_hint ?(opt=false) ctx pcur t =
 let valid_redefinition ctx f1 t1 f2 t2 =
 	let valid t1 t2 =
 		Type.unify t1 t2;
-		if is_null t1 <> is_null t2 || ((follow t1) == t_dynamic && (follow t2) != t_dynamic) then raise (Unify_error [Cannot_unify (t1,t2)]);
+		if is_null t1 <> is_null t2 || ((follow t1) == TDynamic && (follow t2) != TDynamic) then raise (Unify_error [Cannot_unify (t1,t2)]);
 	in
 	let t1, t2 = (match f1.cf_params, f2.cf_params with
 		| [], [] -> t1, t2
@@ -2057,10 +2053,10 @@ module ClassInitializer = struct
 		match t with
 		| None when c.cl_extern || c.cl_interface ->
 			display_error ctx "Type required for extern classes and interfaces" p;
-			t_dynamic
+			TDynamic
 		| None when cctx.is_core_api ->
 			display_error ctx "Type required for core api classes" p;
-			t_dynamic
+			TDynamic
 		| _ ->
 			load_type_hint ctx p t
 
@@ -2103,7 +2099,7 @@ module ClassInitializer = struct
 			match t with
 			| TFun (args,ret) -> is_full_type ret && List.for_all (fun (_,_,t) -> is_full_type t) args
 			| TMono r -> (match !r with None -> false | Some t -> is_full_type t)
-			| TAbstract _ | TInst _ | TEnum _ | TLazy _ | TDynamic _ | TAnon _ | TType _ -> true
+			| TAbstract _ | TInst _ | TEnum _ | TLazy _ | TDynamic | TAnon _ | TType _ -> true
 		in
 		let handle_display_field () =
 			if fctx.is_macro && not ctx.in_macro then
@@ -2324,7 +2320,7 @@ module ClassInitializer = struct
 						let resolve_m args =
 							(try unify_raise ctx t (tfun (tthis :: args) m) cf.cf_pos with Error (Unify l,p) -> error (error_msg (Unify l)) p);
 							match follow m with
-								| TMono _ when (match t with TFun(_,r) -> r == t_dynamic | _ -> false) -> t_dynamic
+								| TMono _ when (match t with TFun(_,r) -> r == TDynamic | _ -> false) -> TDynamic
 								| m -> m
 						in
 							let r = exc_protect ctx (fun r ->
@@ -3747,7 +3743,7 @@ let make_generic ctx ps pt p =
 				| TAbstract(a,tl) -> (s_type_path_underscore a.a_path) ^ (loop_tl tl)
 				| _ when not top -> "_" (* allow unknown/incompatible types as type parameters to retain old behavior *)
 				| TMono _ -> raise (Generic_Exception (("Could not determine type for parameter " ^ s), p))
-				| TDynamic _ -> "Dynamic"
+				| TDynamic -> "Dynamic"
 				| t -> raise (Generic_Exception (("Type parameter must be a class or enum instance (found " ^ (s_type (print_context()) t) ^ ")"), p))
 			and loop_tl tl = match tl with
 				| [] -> ""
@@ -3886,8 +3882,8 @@ let rec build_generic ctx c p tl =
 				| Some t -> loop t)
 			| TLazy f ->
 				loop ((!f)());
-			| TDynamic t2 ->
-				if t == t2 then () else loop t2
+			| TDynamic ->
+				()
 			| TAnon a ->
 				PMap.iter (fun _ f -> loop f.cf_type) a.a_fields
 			| TFun (args,ret) ->

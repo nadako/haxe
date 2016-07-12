@@ -249,7 +249,7 @@ let rec type_id ctx t =
 
 let type_opt ctx t =
 	match follow_basic t with
-	| TDynamic _ | TMono _ -> None
+	| TDynamic | TMono _ -> None
 	| _ -> Some (type_id ctx t)
 
 let type_void ctx t =
@@ -295,7 +295,7 @@ let classify ctx t =
 		KType (type_id ctx t)
 	| TMono _
 	| TType _
-	| TDynamic _ ->
+	| TDynamic ->
 		KDynamic
 	| TLazy _ ->
 		assert false
@@ -1322,7 +1322,7 @@ let rec gen_expr_content ctx retval e =
 				if t1 <> t then coerce ctx t;
 			| Some t ->
 				(* manual cast *)
-				let tid = (match gen_access ctx (mk (TTypeExpr t) t_dynamic e.epos) Read with
+				let tid = (match gen_access ctx (mk (TTypeExpr t) TDynamic e.epos) Read with
 					| VGlobal id -> id
 					| _ -> assert false
 				) in
@@ -1625,7 +1625,7 @@ and gen_binop ctx retval op e1 e2 t p =
 			gen_op A3OEq
 		| Some c ->
 			let f = FStatic (c,try PMap.find "compare" c.cl_statics with Not_found -> assert false) in
-			gen_expr ctx true (mk (TCall (mk (TField (mk (TTypeExpr (TClassDecl c)) t_dynamic p,f)) t_dynamic p,[e1;e2])) ctx.com.basic.tbool p);
+			gen_expr ctx true (mk (TCall (mk (TField (mk (TTypeExpr (TClassDecl c)) TDynamic p,f)) TDynamic p,[e1;e2])) ctx.com.basic.tbool p);
 	in
 	match op with
 	| OpAssign ->
@@ -2125,7 +2125,7 @@ let generate_class ctx c =
 				cf_meta = [];
 				cf_doc = None;
 				cf_pos = c.cl_pos;
-				cf_type = TFun ([],t_dynamic);
+				cf_type = TFun ([],TDynamic);
 				cf_params = [];
 				cf_expr = None;
 				cf_kind = Method MethNormal;

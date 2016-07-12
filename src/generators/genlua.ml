@@ -218,7 +218,7 @@ let is_dynamic_iterator ctx e =
 			| TInst ({ cl_path = [],"Array" },_)
 			| TInst ({ cl_kind = KTypeParameter _}, _)
 			| TAnon _
-			| TDynamic _
+			| TDynamic
 			| TMono _ ->
 				true
 			| _ -> false
@@ -239,7 +239,7 @@ let rec is_uncertain_type t =
 	  | Statics _
 	  | EnumStatics _ -> false
 	  | _ -> true)
-	| TDynamic _ -> true
+	| TDynamic -> true
 	| _ -> false
 
 let is_uncertain_expr e =
@@ -252,7 +252,7 @@ let rec is_anonym_type t =
 	  | Statics _
 	  | EnumStatics _ -> false
 	  | _ -> true)
-	| TDynamic _ -> true
+	| TDynamic -> true
 	| _ -> false
 
 let is_anonym_expr e = is_anonym_type e.etype
@@ -786,7 +786,7 @@ and gen_expr ?(local=true) ctx e = begin
 			| TAnon _ ->
 				assert false
 			| TMono _
-			| TDynamic _ ->
+			| TDynamic ->
 				None
 			) in
 			match t with
@@ -964,14 +964,14 @@ and gen_block_element ?(after=false) ctx e  =
 and gen_value ctx e =
 	let assign e =
 		mk (TBinop (Ast.OpAssign,
-			mk (TLocal (match ctx.in_value with None -> assert false | Some v -> v)) t_dynamic e.epos,
+			mk (TLocal (match ctx.in_value with None -> assert false | Some v -> v)) TDynamic e.epos,
 			e
 		)) e.etype e.epos
 	in
 	let value() =
 		let old = ctx.in_value, ctx.in_loop in
 		let r_id = temp ctx in
-		let r = alloc_var r_id t_dynamic e.epos in
+		let r = alloc_var r_id TDynamic e.epos in
 		ctx.in_value <- Some r;
 		ctx.in_loop <- false;
 		spr ctx "(function() ";

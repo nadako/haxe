@@ -149,7 +149,7 @@ let type_change_ok com t1 t2 =
 		true
 	else begin
 		let rec map t = match t with
-			| TMono r -> (match !r with None -> t_dynamic | Some t -> map t)
+			| TMono r -> (match !r with None -> TDynamic | Some t -> map t)
 			| _ -> Type.map map t
 		in
 		let t1 = map t1 in
@@ -174,9 +174,9 @@ let type_change_ok com t1 t2 =
 			| _ ->
 				true
 		in
-		(* Check equality again to cover cases where TMono became t_dynamic *)
+		(* Check equality again to cover cases where TMono became TDynamic *)
 		t1 == t2 || match follow t1,follow t2 with
-			| TDynamic _,_ | _,TDynamic _ -> false
+			| TDynamic,_ | _,TDynamic -> false
 			| _ ->
 				if com.config.pf_static && is_nullable_or_whatever t1 <> is_nullable_or_whatever t2 then false
 				else type_iseq t1 t2
@@ -231,7 +231,7 @@ module TexprFilter = struct
 			loop {e with eexpr = TWhile(e1,e2,NormalWhile)}
 		| TWhile(e1,e2,flag) when not (is_true_expr e1) ->
 			let p = e.epos in
-			let e_break = mk TBreak t_dynamic p in
+			let e_break = mk TBreak TDynamic p in
 			let e_not = mk (TUnop(Not,Prefix,Codegen.mk_parent e1)) e1.etype e1.epos in
 			let e_if eo = mk (TIf(e_not,e_break,eo)) com.basic.tvoid p in
 			let rec map_continue e = match e.eexpr with

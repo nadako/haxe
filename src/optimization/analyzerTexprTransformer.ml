@@ -147,9 +147,9 @@ let rec func ctx bb tf t p =
 			bb,{e with eexpr = TEnumParameter(e1,ef,ei)}
 		| TFunction tf ->
 			let bb_func,bb_func_end = func ctx bb tf e.etype e.epos in
-			let e_fun = mk (TConst (TString "fun")) t_dynamic p in
+			let e_fun = mk (TConst (TString "fun")) TDynamic p in
 			let econst = mk (TConst (TInt (Int32.of_int bb_func.bb_id))) ctx.com.basic.tint e.epos in
-			let ec = mk (TCall(e_fun,[econst])) t_dynamic p in
+			let ec = mk (TCall(e_fun,[econst])) TDynamic p in
 			let bb_next = create_node BKNormal bb.bb_type bb.bb_pos in
 			add_cfg_edge bb bb_next CFGGoto;
 			set_syntax_edge bb (SEMerge bb_next);
@@ -165,7 +165,7 @@ let rec func ctx bb tf t p =
 			bb,e
 		| TThrow _ | TReturn _ | TBreak | TContinue ->
 			let bb = block_element bb e in
-			bb,mk (TConst TNull) t_dynamic e.epos
+			bb,mk (TConst TNull) TDynamic e.epos
 		| TVar _ | TFor _ | TWhile _ ->
 			error "Cannot use this expression as value" e.epos
 	and value bb e =
@@ -416,7 +416,7 @@ let rec func ctx bb tf t p =
 			bb_next;
 		| TTry(e1,catches) ->
 			let bb_try = create_node BKNormal e1.etype e1.epos in
-			let bb_exc = create_node BKException t_dynamic e.epos in
+			let bb_exc = create_node BKException TDynamic e.epos in
 			add_cfg_edge bb bb_try CFGGoto;
 			let close = begin_try bb_exc in
 			let bb_try_next = block bb_try e1 in
@@ -461,10 +461,10 @@ let rec func ctx bb tf t p =
 			add_terminator bb e
 		| TReturn (Some e1) when ExtType.is_void (follow e1.etype) ->
 			let bb = block_element bb e1 in
-			block_element bb (mk (TReturn None) t_dynamic e.epos)
+			block_element bb (mk (TReturn None) TDynamic e.epos)
 		| TReturn (Some e1) ->
 			begin try
-				let mk_return e1 = mk (TReturn (Some e1)) t_dynamic e.epos in
+				let mk_return e1 = mk (TReturn (Some e1)) TDynamic e.epos in
 				block_element_value bb e1 mk_return
 			with Exit ->
 				let bb,e1 = value bb e1 in
@@ -483,7 +483,7 @@ let rec func ctx bb tf t p =
 		| TThrow e1 ->
 			begin try
 				let mk_throw e1 =
-					mk (TThrow e1) t_dynamic e.epos
+					mk (TThrow e1) TDynamic e.epos
 				in
 				block_element_value bb e1 mk_throw
 			with Exit ->

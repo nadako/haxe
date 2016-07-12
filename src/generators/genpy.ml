@@ -108,10 +108,10 @@ module Transformer = struct
 	}
 
 	let como = ref None
-	let t_bool = ref t_dynamic
-	let t_void = ref t_dynamic
-	let t_string = ref t_dynamic
-	let t_int = ref t_dynamic
+	let t_bool = ref TDynamic
+	let t_void = ref TDynamic
+	let t_string = ref TDynamic
+	let t_int = ref TDynamic
 	let c_reflect = ref (fun () -> null_class)
 
 	let init com =
@@ -180,9 +180,9 @@ module Transformer = struct
 	let create_non_local n pos =
 		let s = "nonlocal " ^ (KeywordHandler.handle_keywords n) in
 		(* TODO: this is a hack... *)
-		let id = mk (TLocal (to_tvar "python_Syntax._pythonCode" t_dynamic pos) ) !t_void pos in
-		let id2 = mk (TLocal( to_tvar s t_dynamic pos)) !t_void pos in
-		mk (TCall(id, [id2])) t_dynamic pos
+		let id = mk (TLocal (to_tvar "python_Syntax._pythonCode" TDynamic pos) ) !t_void pos in
+		let id2 = mk (TLocal( to_tvar s TDynamic pos)) !t_void pos in
+		mk (TCall(id, [id2])) TDynamic pos
 
 	let to_tlocal_expr ?(capture = false) n t p =
 		mk (TLocal (to_tvar ~capture:capture n t p)) t p
@@ -292,7 +292,7 @@ module Transformer = struct
 			| [] ->
 				tf.tf_expr
 			| _ ->
-				let eb = mk (TBlock (List.rev assigns)) t_dynamic p in
+				let eb = mk (TBlock (List.rev assigns)) TDynamic p in
 				Type.concat eb tf.tf_expr
 		in
 		let e1 = to_expr (transform_expr ~next_id:(Some ae.a_next_id) body) in
@@ -621,7 +621,7 @@ module Transformer = struct
 			let name = ae.a_next_id() in
 			let block,tr = match List.rev el with
 				| e :: el ->
-					List.rev ((mk (TReturn (Some e)) t_dynamic e.epos) :: el),e.etype
+					List.rev ((mk (TReturn (Some e)) TDynamic e.epos) :: el),e.etype
 				| [] ->
 					assert false
 			in
@@ -693,7 +693,7 @@ module Transformer = struct
 			let var_n = alloc_var n ef.etype ef.epos in
 			let f1_assign = mk (TVar(var_n,Some f1)) !t_void f1.epos in
 			let var_local = mk (TLocal var_n) ef.etype f1.epos in
-			let er = mk (TReturn (Some var_local)) t_dynamic  ae.a_expr.epos in
+			let er = mk (TReturn (Some var_local)) TDynamic  ae.a_expr.epos in
 			lift true [f1_assign] er
 
 		| (_,TReturn Some(x)) ->
@@ -1018,7 +1018,7 @@ module Printer = struct
 	let rec is_anon_or_dynamic t = match follow t with
 		| TAbstract(a,tl) ->
 			is_anon_or_dynamic (Abstract.get_underlying_type a tl)
-		| TAnon _ | TDynamic _ -> true
+		| TAnon _ | TDynamic -> true
 		| _ -> false
 
 	let handle_keywords s =
@@ -1257,9 +1257,9 @@ module Printer = struct
 					Printf.sprintf "(%s %s %s)" (print_expr pctx e1) (fst ops) (print_expr pctx e2)
 				| x, _ when is_underlying_array x ->
 					Printf.sprintf "(%s %s %s)" (print_expr pctx e1) (fst ops) (print_expr pctx e2)
-				| TDynamic _, TDynamic _ ->
+				| TDynamic, TDynamic ->
 					Printf.sprintf "%s(%s,%s)" (third ops) (print_expr pctx e1) (print_expr pctx e2)
-				| TDynamic _, x | x, TDynamic _ when is_list_or_anon x ->
+				| TDynamic, x | x, TDynamic when is_list_or_anon x ->
 					Printf.sprintf "%s(%s,%s)" (third ops) (print_expr pctx e1) (print_expr pctx e2)
 				| _,_ -> Printf.sprintf "(%s %s %s)" (print_expr pctx e1) (snd ops) (print_expr pctx e2))
 			| TBinop(OpMod,e1,e2) when (is_type1 "" "Int")(e1.etype) && (is_type1 "" "Int")(e2.etype) ->
@@ -1295,7 +1295,7 @@ module Printer = struct
 				let e1_str = safe_string e1 in
 				let e2_str = safe_string e2 in
 				Printf.sprintf "(%s + %s)" e1_str e2_str
-			| TBinop(OpAdd,e1,e2) when (match follow e.etype with TDynamic _ -> true | _ -> false) ->
+			| TBinop(OpAdd,e1,e2) when (match follow e.etype with TDynamic -> true | _ -> false) ->
 				Printf.sprintf "python_Boot._add_dynamic(%s,%s)" (print_expr pctx e1) (print_expr pctx e2)
 			| TBinop(op,e1,e2) ->
 				Printf.sprintf "(%s %s %s)" (print_expr pctx e1) (print_binop op) (print_expr pctx e2)
@@ -1436,7 +1436,7 @@ module Printer = struct
 
 	and print_try pctx e1 catches =
 		let has_catch_all = List.exists (fun (v,_) -> match v.v_type with
-			| TDynamic _ -> true
+			| TDynamic -> true
 			| _ -> false
 		) catches in
 		let has_only_catch_all = has_catch_all && begin match catches with
@@ -1469,7 +1469,7 @@ module Printer = struct
 					res
 			in
 			match follow v.v_type with
-				| TDynamic _ ->
+				| TDynamic ->
 					begin if has_only_catch_all then
 						Printf.sprintf "%s%s" assign (print_expr pctx e)
 					else
@@ -1882,7 +1882,7 @@ module Generator = struct
 		let e = match e.eexpr with
 			| TFunction(f) ->
 				let args = if add_self then
-					let v = alloc_var "self" t_dynamic p in
+					let v = alloc_var "self" TDynamic p in
 					v.v_meta <- (Meta.This,[],p) :: v.v_meta;
 					(v,None) :: f.tf_args
 				else

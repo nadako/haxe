@@ -57,8 +57,8 @@ let rec is_exhaustive e1 = match e1.eexpr with
 
 let mk_untyped_call name p params =
 	{
-		eexpr = TCall({ eexpr = TLocal(alloc_unbound_var name t_dynamic p); etype = t_dynamic; epos = p }, params);
-		etype = t_dynamic;
+		eexpr = TCall({ eexpr = TLocal(alloc_unbound_var name TDynamic p); etype = TDynamic; epos = p }, params);
+		etype = TDynamic;
 		epos = p;
 	}
 
@@ -101,7 +101,7 @@ let api_inline2 com c field params p =
 		let stringv() =
 			let to_str = mk (TBinop (Ast.OpAdd, mk (TConst (TString "")) com.basic.tstring pos, ev)) com.basic.tstring pos in
 			if com.platform = Js || is_nullable ev.etype then
-				let chk_null = mk (TBinop (Ast.OpEq, ev, mk (TConst TNull) t_dynamic pos)) com.basic.tbool pos in
+				let chk_null = mk (TBinop (Ast.OpEq, ev, mk (TConst TNull) TDynamic pos)) com.basic.tbool pos in
 				mk (TIf (chk_null, mk (TConst (TString "null")) com.basic.tstring pos, Some to_str)) com.basic.tstring pos
 			else
 				to_str
@@ -235,7 +235,7 @@ let rec is_affected_type t = match follow t with
 	| TAbstract({a_path = [],("Int" | "Float" | "Bool")},_) -> true
 	| TAbstract({a_path = ["haxe"],("Int64" | "Int32")},_) -> true
 	| TAbstract(a,tl) -> is_affected_type (Abstract.get_underlying_type a tl)
-	| TDynamic _ -> true (* sadly *)
+	| TDynamic -> true (* sadly *)
 	| _ -> false
 
 let create_affection_checker () =
@@ -371,7 +371,7 @@ let rec type_inline ctx cf f ethis params tret config p ?(self_calling_closure=f
 				if we cast from Dynamic, create a local var as well to do the cast
 				once and allow DCE to perform properly.
 			*)
-			let e = if follow v.v_type != t_dynamic && follow e.etype == t_dynamic then mk (TCast(e,None)) v.v_type e.epos else e in
+			let e = if follow v.v_type != TDynamic && follow e.etype == TDynamic then mk (TCast(e,None)) v.v_type e.epos else e in
 			(match e.eexpr, opt with
 			| TConst TNull , Some c -> mk (TConst c) v.v_type e.epos
 			(*
@@ -1306,7 +1306,7 @@ let rec reduce_loop ctx e =
 		| Some e -> reduce_loop ctx e)
 	| TCall ({ eexpr = TFunction func } as ef,el) ->
 		let cf = mk_field "" ef.etype e.epos in
-		let ethis = mk (TConst TThis) t_dynamic e.epos in
+		let ethis = mk (TConst TThis) TDynamic e.epos in
 		let rt = (match follow ef.etype with TFun (_,rt) -> rt | _ -> assert false) in
 		let inl = (try type_inline ctx cf func ethis el rt None e.epos ~self_calling_closure:true false with Error (Custom _,_) -> None) in
 		(match inl with
@@ -1353,7 +1353,7 @@ let rec make_constant_expression ctx ?(concat_strings=false) e =
 (* 	| TCall ({ etype = TFun(_,ret); eexpr = TField (_,FStatic (c,cf)) },el) ->
 		(try
 			let func = match cf.cf_expr with Some ({eexpr = TFunction func}) -> func | _ -> raise Not_found in
-			let ethis = mk (TConst TThis) t_dynamic e.epos in
+			let ethis = mk (TConst TThis) TDynamic e.epos in
 			let inl = (try type_inline ctx cf func ethis el ret None e.epos false with Error (Custom _,_) -> None) in
 			(match inl with
 			| None -> None

@@ -769,7 +769,7 @@ and type_string_suff suffix haxe_type remap =
       | EnumStatics e -> type_string_suff suffix (TEnum (e,List.map snd e.e_params))
       | _ -> "Dynamic"  ^ suffix )
       *)
-   | TDynamic haxe_type -> "Dynamic" ^ suffix
+   | TDynamic -> "Dynamic" ^ suffix
    | TLazy func -> type_string_suff suffix ((!func)()) remap
    | TAbstract (abs,pl) when abs.a_impl <> None ->
       type_string_suff suffix (Abstract.get_underlying_type abs pl) remap
@@ -1666,7 +1666,7 @@ let rec cpp_type_of ctx haxe_type =
 
    | TFun _ -> TCppObject
    | TAnon _ -> TCppObject
-   | TDynamic _ -> TCppDynamic
+   | TDynamic -> TCppDynamic
    | TLazy func -> cpp_type_of ctx ((!func)())
    )
    and  cpp_type_from_path ctx path params default =
@@ -6816,7 +6816,7 @@ let generate_source ctx =
    (match common_ctx.main with
    | None -> generate_dummy_main common_ctx
    | Some e ->
-      let main_field = { cf_name = "__main__"; cf_type = t_dynamic; cf_expr = Some e; cf_pos = e.epos; cf_public = true; cf_meta = []; cf_overloads = []; cf_doc = None; cf_kind = Var { v_read = AccNormal; v_write = AccNormal; }; cf_params = [] } in
+      let main_field = { cf_name = "__main__"; cf_type = TDynamic; cf_expr = Some e; cf_pos = e.epos; cf_public = true; cf_meta = []; cf_overloads = []; cf_doc = None; cf_kind = Var { v_read = AccNormal; v_write = AccNormal; }; cf_params = [] } in
       let class_def = { null_class with cl_path = ([],"@Main"); cl_ordered_statics = [main_field] } in
       main_deps := find_referenced_types ctx (TClassDecl class_def) super_deps constructor_deps false true false;
       generate_main ctx super_deps class_def

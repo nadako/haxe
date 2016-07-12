@@ -574,8 +574,8 @@ let build_dependencies t =
 			add_type_rec (t::l) t2;
 		| TAnon a ->
 			PMap.iter (fun _ f -> add_type_rec (t::l) f.cf_type) a.a_fields
-		| TDynamic t2 ->
-			add_type_rec (t::l) t2;
+		| TDynamic ->
+			()
 		| TLazy f ->
 			add_type_rec l ((!f)())
 		| TMono r ->

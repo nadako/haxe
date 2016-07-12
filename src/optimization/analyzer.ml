@@ -48,9 +48,9 @@ module Ssa = struct
 		let p = bb.bb_pos in
 		let ev = mk (TLocal v) v.v_type p in
 		let el = List.map (fun _ -> ev) bb.bb_incoming in
-		let e_phi = mk (TConst (TString "phi")) t_dynamic p in
-		let ec = mk (TCall(e_phi,el)) t_dynamic p in
-		let e = mk (TBinop(OpAssign,ev,ec)) t_dynamic p in
+		let e_phi = mk (TConst (TString "phi")) TDynamic p in
+		let ec = mk (TCall(e_phi,el)) TDynamic p in
+		let e = mk (TBinop(OpAssign,ev,ec)) TDynamic p in
 		DynArray.add bb.bb_phi e
 
 	let insert_phi ctx =
@@ -369,7 +369,7 @@ module ConstPropagation = DataFlow(struct
 	let transfer ctx bb e =
 		let rec eval bb e =
 			let wrap = function
-				| Const ct -> mk (TConst ct) t_dynamic null_pos
+				| Const ct -> mk (TConst ct) TDynamic null_pos
 				| _ -> raise Exit
 			in
 			let unwrap e = match e.eexpr with
@@ -382,7 +382,7 @@ module ConstPropagation = DataFlow(struct
 			| TConst ct ->
 				Const ct
 			| TLocal v ->
-				if is_unbound v || (follow v.v_type) == t_dynamic || v.v_capture then
+				if is_unbound v || (follow v.v_type) == TDynamic || v.v_capture then
 					Bottom
 				else
 					get_cell v.v_id
@@ -582,8 +582,8 @@ module CodeMotion = DataFlow(struct
 
 	and t = (t_def * Type.t * pos)
 
-	let top = (Top,t_dynamic,null_pos)
-	let bottom = (Bottom,t_dynamic,null_pos)
+	let top = (Top,TDynamic,null_pos)
+	let bottom = (Bottom,TDynamic,null_pos)
 
 	let rec equals (lat1,_,_) (lat2,_,_) = match lat1,lat2 with
 		| Top,Top
@@ -1137,7 +1137,7 @@ module Run = struct
 				tf,true
 			| _ ->
 				(* Wrap expression in a function so we don't have to treat it as a special case throughout. *)
-				let e = mk (TReturn (Some e)) t_dynamic e.epos in
+				let e = mk (TReturn (Some e)) TDynamic e.epos in
 				let tf = { tf_args = []; tf_type = e.etype; tf_expr = e; } in
 				tf,false
 		in
