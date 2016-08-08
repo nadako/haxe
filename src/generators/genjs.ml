@@ -357,6 +357,57 @@ let is_dynamic_iterator ctx e =
 	| _ ->
 		false
 
+(* see https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Operator_Precedence *)
+let rec precedence e =
+	match e.eexpr with
+	| TMeta (_,e2) | TCast (e2,None) ->
+		precedence e2
+	| TParenthesis _ ->
+		19
+	| TField _ | TArray _ | TNew _ ->
+		18
+	(* TCall = 17 comes later, because we match for magic name calls first *)
+	| TUnop ((Increment | Decrement), Postfix, _) ->
+		16
+	| TUnop ((Not | NegBits | Neg | Increment | Decrement), Prefix, _)
+	| TCall ({ eexpr = TLocal { v_name = "__typeof__" } }, _) ->
+		15
+	| TBinop ((OpMult | OpDiv | OpMod), _, _) ->
+		14
+	| TBinop ((OpAdd | OpSub), _, _) ->
+		13
+	| TBinop ((OpShl | OpShr | OpUShr), _, _) ->
+		12
+	| TBinop ((OpLt | OpLte | OpGt | OpGte), _, _)
+	| TCall ({ eexpr = TLocal { v_name = "__instanceof__" } }, _) ->
+		11
+	| TBinop ((OpEq | OpNotEq), _, _)
+	| TCall ({ eexpr = TLocal { v_name = "__strict_eq__" | "__strict_neq__" } }, _) ->
+		10
+	| TBinop (OpAnd, _, _) ->
+		9
+	| TBinop (OpOr, _, _) ->
+		8
+	| TBinop (OpXor, _, _) ->
+		7
+	| TBinop (OpBoolAnd, _, _) ->
+		6
+	| TBinop (OpBoolOr, _, _) ->
+		5
+	| TIf (_, _, Some _) -> (* ternary *)
+		4
+	| TBinop ((OpAssign | OpAssignOp _), _, _) ->
+		3
+	| TCall _
+	| TCast (_,Some _) -> (* cast with type is a call *)
+		17
+	| TConst _ | TLocal _ | TTypeExpr _ | TObjectDecl _ | TArrayDecl _ | TFunction _
+	| TVar _ | TBlock _ | TFor _ | TWhile _ | TSwitch _ | TTry _ | TReturn _ | TBreak
+	| TContinue | TThrow _ | TEnumParameter _  | TIf _
+	| TUnop ((Not | NegBits | Neg), Postfix, _) | TBinop ((OpInterval | OpArrow), _, _) ->
+		0
+
+
 let gen_constant ctx p = function
 	| TInt i -> print ctx "%ld" i
 	| TFloat s -> spr ctx s
