@@ -226,6 +226,51 @@ let is_dynamic_iterator ctx e =
 	| _ ->
 		false
 
+(*
+	return index of a first element in the list for which `f` returns true
+	TODO: is there some standard function to do that?
+ *)
+let index_of f l =
+	let rec find lst idx =
+		match lst with
+		| [] -> raise Not_found
+		| el :: rest ->
+			if f el then
+				idx
+			else
+				find rest (idx + 1)
+	in
+	find l 0
+
+(* create a __lua__ call *)
+let mk_lua_code com code args t pos =
+	let lua_local = Codegen.ExprBuilder.make_local (alloc_var "__lua__" t_dynamic pos) pos in
+	let code_const = Codegen.ExprBuilder.make_string com code pos in
+	mk (TCall (lua_local, code_const :: args)) t pos
+
+(* create a multi-return boxing call for given expr *)
+let mk_mr_box com e = 
+	let s_fields =
+		match follow e.etype with
+		| TInst (c,_) ->
+			String.concat ", " (List.map (fun f -> "\"" ^ f.cf_name ^ "\"") c.cl_ordered_fields)
+		| _ -> assert false
+	in
+	let code = Printf.sprintf "__hx_box_mr({0}, {%s})" s_fields in
+	mk_lua_code com code [e] e.etype e.epos
+
+(* create a multi-return select call for given expr and field name *)
+let mk_mr_select com e name =
+	let i =
+		match follow e.etype with
+		| TInst (c,_) ->
+			index_of (fun f -> f.cf_name = name) c.cl_ordered_fields
+		| _ ->
+			assert false
+	in
+	let code = Printf.sprintf "_G.select(%i, {0})" i in
+	mk_lua_code com code [e] e.etype e.epos
+
 (* from genphp *)
 let rec is_string_type t =
 	match follow t with
@@ -476,6 +521,9 @@ and gen_expr ?(local=true) ctx e = begin
 		spr ctx " end )({";
 		concat ctx ", " (fun (f,e) -> print ctx "%s = " (anon_field f); gen_value ctx e) fields;
 		spr ctx "})";
+	| TField ({eexpr = TLocal v}, f) when Meta.has Meta.MultiReturn v.v_meta ->
+		(* field of a multireturn local var is actually just a local var *)
+		spr ctx ((ident v.v_name) ^ "_" ^ (field_name f));
 	| TField (x,f) ->
 		gen_value ctx x;
 		let name = field_name f in
@@ -551,11 +599,34 @@ and gen_expr ?(local=true) ctx e = begin
 				    gen_value ctx e1;
 				    semicolon ctx;
 
+				| _ when Meta.has Meta.MultiReturn v.v_meta ->
+					(* multi-return var is generated as several vars for unpacking *)
+					let name = ident v.v_name in
+					let names =
+						match follow v.v_type with
+						| TInst (c, _) ->
+							List.map (fun f -> name ^ "_" ^ f.cf_name) c.cl_ordered_fields
+						| _ ->
+							assert false
+					in
+					spr ctx "local ";
+					spr ctx (String.concat ", " names);
+					spr ctx " = ";
+					gen_value ctx e;
+					semicolon ctx
+
 				| _ ->
 				    if local then
 					spr ctx "local ";
 				    spr ctx (ident v.v_name);
 				    spr ctx " = ";
+
+					(*
+						if it was a multi-return var but it was used as a value itself,
+						we have to box it in an object conforming to a multi-return extern class 
+					*)
+					let is_boxed_multireturn = Meta.has (Meta.Custom ":lua_mr_box") v.v_meta in
+					let e = if is_boxed_multireturn then mk_mr_box ctx.com e else e in
 				    gen_value ctx e;
 				    semicolon ctx;
 		end
@@ -1673,6 +1744,62 @@ let alloc_ctx com =
 		| _ -> s_path ctx p);
 	ctx
 
+
+let transform_multireturn ctx = function
+	| TClassDecl c ->
+		let transform_field f =
+			match f.cf_expr with 
+			| Some e ->
+				let rec loop e =
+					let is_multireturn t =
+						match follow t with
+						| TInst (c, _) when Meta.has Meta.MultiReturn c.cl_meta -> true
+						| _ -> false
+					in
+					match e.eexpr with
+					(*
+						if we found a var declaration initialized by a multi-return call, mark it with @:multiReturn meta,
+						so it will later be generated as multiple locals unpacking the value
+					*)
+					| TVar (v, Some ({ eexpr = TCall _ } as ecall)) when is_multireturn v.v_type ->
+						v.v_meta <- (Meta.MultiReturn,[],v.v_pos) :: v.v_meta;
+						let ecall = Type.map_expr loop ecall in
+						{ e with eexpr = TVar (v, Some ecall) }
+
+					(* if we found a field access for the multi-return call, generate select call *)
+					| TField ({ eexpr = TCall _ } as ecall, f) when is_multireturn ecall.etype ->
+						let ecall = Type.map_expr loop ecall in
+						mk_mr_select ctx.com ecall (field_name f)
+
+					(* if we found a multi-return call used as a value, box it *)
+					| TCall _ when is_multireturn e.etype ->
+						let e = Type.map_expr loop e in
+						mk_mr_box ctx.com e
+
+					(* if we found a field access for a multi-return local - that's fine, because it'll be generated as a local var *)
+					| TField ({ eexpr = TLocal v}, _) when Meta.has Meta.MultiReturn v.v_meta ->
+						e
+
+					(*
+						if we found usage of local var we previously marked with @:multiReturn as a value itself,
+						remove the @:multiReturn meta and add "box me" meta so it'll be boxed on var initialization
+					*)
+					| TLocal v when Meta.has Meta.MultiReturn v.v_meta ->
+						v.v_meta <- List.filter (fun (m,_,_) -> m <> Meta.MultiReturn) v.v_meta;
+						v.v_meta <- (Meta.Custom ":lua_mr_box",[],v.v_pos) :: v.v_meta;
+						e
+
+					| _ ->
+						Type.map_expr loop e 
+				in
+				f.cf_expr <- Some (loop e); 
+			| _ -> ()
+		in
+		List.iter transform_field c.cl_ordered_fields;
+		List.iter transform_field c.cl_ordered_statics;
+		Option.may transform_field c.cl_constructor;
+	| _ -> ()
+
 let generate com =
 	let t = Common.timer "generate lua" in
 	let ctx = alloc_ctx com in
@@ -1781,6 +1908,7 @@ let generate com =
 	List.iter (gen__init__hoist ctx) (List.rev ctx.inits); newline ctx;
 	ctx.inits <- []; (* reset inits after hoist *)
 
+	List.iter (transform_multireturn ctx) com.types;
 	List.iter (generate_type ctx) com.types;
 
 
