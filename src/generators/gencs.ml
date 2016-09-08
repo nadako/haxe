@@ -192,6 +192,22 @@ let in_runtime_class gen =
 	| Some { cl_path = ["haxe";"lang"],"Runtime"} -> true
 	| _ -> false
 
+
+let doc_regexp = Str.regexp "\\(\r?\n\r?\n\\)"
+let newline_regexp = Str.regexp "\r?\n"
+
+let format_doc s =
+	let rec loop parts summary acc =
+		match parts with
+		| [] -> acc
+		| part :: rest ->
+			let para = if summary then ("<summary>" ^ part ^ "</summary>") else ("<para>" ^ part ^ "</para>") in
+			let lines = Str.split newline_regexp para in
+			let lines = List.map (fun s -> "/// " ^ s ^ "\n") lines in
+			loop rest false (acc @ lines)
+	in
+	loop (Str.split doc_regexp s) true []
+
 (* ******************************************* *)
 (* CSharpSpecificESynf *)
 (* ******************************************* *)
@@ -2016,6 +2032,10 @@ let configure gen =
 	in
 
 	let rec gen_class_field w ?(is_overload=false) is_static cl is_final cf =
+		Option.may (fun doc ->
+			let lines = format_doc doc in
+			List.iter (fun s -> write w s) lines;
+		) cf.cf_doc;
 		gen_attributes w cf.cf_meta;
 		let is_interface = cl.cl_interface in
 		let name, is_new, is_explicit_iface = match cf.cf_name with
