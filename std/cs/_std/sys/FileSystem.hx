@@ -108,7 +108,7 @@ class FileSystem {
 
 	public static function deleteDirectory( path : String ) : Void
 	{
-		Directory.Delete(path);
+		Directory.Delete(path, true);
 	}
 
 	public static function readDirectory( path : String ) : Array<String>
