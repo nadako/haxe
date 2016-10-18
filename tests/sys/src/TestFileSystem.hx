@@ -5,17 +5,8 @@ class TestFileSystem extends haxe.unit.TestCase {
 		Recursively remove a given directory.
 	*/
 	static function removeDir(dir:String):Void {
-		if (FileSystem.exists(dir)) {
-			for (item in FileSystem.readDirectory(dir)) {
-				item = haxe.io.Path.join([dir, item]);
-				if (FileSystem.isDirectory(item)) {
-					removeDir(item);
-				} else {
-					FileSystem.deleteFile(item);
-				}
-			}
+		if (FileSystem.exists(dir))
 			FileSystem.deleteDirectory(dir);
-		}
 	}
 
 	var dir = "temp/TestFileSystem/";
@@ -90,6 +81,17 @@ class TestFileSystem extends haxe.unit.TestCase {
 			FileSystem.deleteDirectory(dir + "1");
 			FileSystem.deleteDirectory(dir + "complex");
 		}
+	}
+
+	function testRemoveDirectory():Void {
+		var path = '$dir/some';
+		FileSystem.createDirectory(path);
+		FileSystem.createDirectory('$path/sub');
+		FileSystem.createDirectory('$path/sub2');
+		sys.io.File.saveContent('$path/sub2/some.txt', "hi");
+		sys.io.File.saveContent('$path/some.txt', "hi");
+		FileSystem.deleteDirectory(path);
+		assertEquals(0, FileSystem.readDirectory(dir).length);
 	}
 
 	function testWindowsSpecialCases() {
