@@ -67,6 +67,13 @@ let emit_namespace w pack =
 		w#write ("namespace " ^ (String.concat "." pack) ^ " ");
 		w#begin_block
 
+let generate_class_field ctx cl is_static w cf =
+	if is_static then w#write "static ";
+	w#write "int ";
+	w#write cf.cf_name;
+	w#write ";";
+	w#newline
+
 let generate_class ctx cl =
 	let pack,name = cl.cl_path in
 
@@ -74,10 +81,12 @@ let generate_class ctx cl =
 
 	let close_ns = emit_namespace w pack in
 
-	w#write (Printf.sprintf "class %s " name);
+	let kind = if cl.cl_interface then "interface" else "class" in
+	w#write (Printf.sprintf "%s %s " kind name);
 	let close_cl = w#begin_block in
 
-	w#write "// TODO";
+	List.iter (generate_class_field ctx cl false w) cl.cl_ordered_fields;
+	List.iter (generate_class_field ctx cl true w) cl.cl_ordered_statics;
 
 	close_cl ();
 	close_ns ();
