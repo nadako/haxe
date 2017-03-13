@@ -317,6 +317,7 @@ let get_signature com =
 		s
 
 let is_php7 com = com.platform = Php && PMap.exists "php7" com.defines
+let is_cs2 com = com.platform = Cs && PMap.exists "cs2" com.defines
 
 module CompilationServer = struct
 	type cache = {

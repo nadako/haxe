@@ -293,13 +293,22 @@ module Initialize = struct
 					classes := (Path.parse_path "cpp.cppia.HostClasses" ) :: !classes;
 				"cpp"
 			| Cs ->
-				let old_flush = ctx.flush in
-				ctx.flush <- (fun () ->
-					com.net_libs <- [];
-					old_flush()
-				);
-				Gencs.before_generate com;
-				add_std "cs"; "cs"
+				if Common.is_cs2 com then
+					begin
+						com.package_rules <- PMap.add "cs" (Directory "cs2") com.package_rules;
+						com.package_rules <- PMap.add "cs2" Forbidden com.package_rules;
+						add_std "cs2"
+					end
+				else begin
+					let old_flush = ctx.flush in
+					ctx.flush <- (fun () ->
+						com.net_libs <- [];
+						old_flush()
+					);
+					Gencs.before_generate com;
+					add_std "cs"
+				end;
+				"cs"
 			| Java ->
 				let old_flush = ctx.flush in
 				ctx.flush <- (fun () ->
@@ -360,7 +369,10 @@ let generate tctx ext xml_out interp swf_header =
 		| Cpp ->
 			Gencpp.generate,"cpp"
 		| Cs ->
-			Gencs.generate,"cs"
+			if Common.is_cs2 com then
+				Gencs2.generate,"cs"
+			else
+				Gencs.generate,"cs"
 		| Java ->
 			Genjava.generate,"java"
 		| Python ->
