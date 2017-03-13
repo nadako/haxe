@@ -40,12 +40,12 @@ class source_writer = object(self)
 		self#write "\n"
 
 	method begin_block =
-		if has_content then self#newline;
 		self#write "{";
 		self#push_indent;
-		self#newline
+		self#newline;
+		(fun () -> self#end_block)
 
-	method end_block =
+	method private end_block =
 		self#pop_indent;
 		if has_content then self#newline;
 		self#write "}";
@@ -64,10 +64,8 @@ let emit_namespace w pack =
 	| [] ->
 		(fun () -> ())
 	| _ ->
-		w#write ("namespace " ^ (String.concat "." pack) ^ " {");
-		w#push_indent;
-		w#newline;
-		(fun () -> w#end_block)
+		w#write ("namespace " ^ (String.concat "." pack) ^ " ");
+		w#begin_block
 
 let generate_class ctx cl =
 	let pack,name = cl.cl_path in
@@ -75,7 +73,13 @@ let generate_class ctx cl =
 	let w = new source_writer in
 
 	let close_ns = emit_namespace w pack in
+
+	w#write (Printf.sprintf "class %s " name);
+	let close_cl = w#begin_block in
+
 	w#write "// TODO";
+
+	close_cl ();
 	close_ns ();
 
 	write_file ctx pack name w#get_contents
