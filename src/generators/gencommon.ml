@@ -5534,11 +5534,11 @@ struct
 	let is_exactly_basic gen t1 t2 =
 		match gen.gfollow#run_f t1, gen.gfollow#run_f t2 with
 			| TAbstract(a1, []), TAbstract(a2, []) ->
-				a1 == a2 && Common.defined gen.gcon Define.FastCast
+				a1 == a2
 			| TInst(c1, []), TInst(c2, []) ->
-				c1 == c2 && Common.defined gen.gcon Define.FastCast
+				c1 == c2
 			| TEnum(e1, []), TEnum(e2, []) ->
-				e1 == e2 && Common.defined gen.gcon Define.FastCast
+				e1 == e2
 			| _ ->
 				false
 
@@ -5935,13 +5935,10 @@ struct
 		TFun(loop [] args elist, ret)
 
 	let fastcast_if_needed gen expr real_to_t real_from_t =
-		if Common.defined gen.gcon Define.FastCast then begin
-			if type_iseq gen real_to_t real_from_t then
-				{ expr with etype = real_to_t }
-			else
-				mk_castfast real_to_t { expr with etype=real_from_t }
-		end else
-			handle_cast gen expr real_to_t real_from_t
+		if type_iseq gen real_to_t real_from_t then
+			{ expr with etype = real_to_t }
+		else
+			mk_castfast real_to_t { expr with etype = real_from_t }
 
 	(*
 		Type parameter handling
@@ -6253,11 +6250,6 @@ struct
 					{ main_expr with eexpr = TBinop(op, e1, e2); etype = basic.tint }
 				| _ ->
 					{ main_expr with eexpr = TBinop(op, e1, e2) }
-		in
-		let binop_type = if Common.defined gen.gcon Define.FastCast then
-			binop_type
-		else
-			fun op main_expr e1 e2 -> { main_expr with eexpr = TBinop(op, e1, e2) }
 		in
 
 		let rec run ?(just_type = false) e =

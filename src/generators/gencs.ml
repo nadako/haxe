@@ -418,7 +418,6 @@ struct
 		let is_cl t = match gen.greal_type t with | TInst ( { cl_path = (["System"], "Type") }, [] ) -> true | _ -> false in
 
 		let as_var = alloc_var "__as__" t_dynamic in
-		let fast_cast = Common.defined gen.gcon Define.FastCast in
 
 		let rec run e =
 			match e.eexpr with
@@ -510,7 +509,7 @@ struct
 						epos = expr.epos
 					}
 
-				| TCast(expr, Some(TClassDecl cls)) when fast_cast && cls == null_class ->
+				| TCast(expr, Some(TClassDecl cls)) when cls == null_class ->
 					if is_cs_basic_type (gen.greal_type e.etype) || is_tparam (gen.greal_type e.etype) then
 						{ e with eexpr = TCast(run expr, Some(TClassDecl null_class)) }
 					else

@@ -564,7 +564,6 @@ struct
 		(* let tsingle = mt_to_t_dyn ( get_type gen ([], "Single") ) in *)
 		let ti64 = mt_to_t_dyn ( get_type gen (["java"], "Int64") ) in
 		let string_ext = get_cl ( get_type gen (["haxe";"lang"], "StringExt")) in
-		let fast_cast = Common.defined gen.gcon Define.FastCast in
 
 		let is_string t = match follow t with | TInst({ cl_path = ([], "String") }, []) -> true | _ -> false in
 
@@ -652,22 +651,9 @@ struct
 						epos = expr.epos
 					}
 
-				| TCast(expr, Some(TClassDecl cls)) when fast_cast && cls == null_class ->
+				| TCast(expr, Some(TClassDecl cls)) when cls == null_class ->
 					{ e with eexpr = TCast(run expr, Some(TClassDecl null_class)) }
 
-				| TBinop( (Ast.OpAssignOp OpAdd as op), e1, e2)
-				| TBinop( (Ast.OpAdd as op), e1, e2) when not fast_cast && (is_string e.etype || is_string e1.etype || is_string e2.etype) ->
-						let is_assign = match op with Ast.OpAssignOp _ -> true | _ -> false in
-						let mk_to_string e = { e with eexpr = TCall( mk_static_field_access_infer runtime_cl "toString" e.epos [], [run e] ); etype = gen.gcon.basic.tstring	} in
-						let check_cast e = match gen.greal_type e.etype with
-							| TDynamic _
-							| TAbstract({ a_path = ([], "Float") }, [])
-							| TAbstract({ a_path = ([], "Single") }, []) ->
-									mk_to_string e
-							| _ -> run e
-						in
-
-						{ e with eexpr = TBinop(op, (if is_assign then run e1 else check_cast e1), check_cast e2) }
 				| TCast(expr, _) when is_string e.etype ->
 					{ e with eexpr = TCall( mk_static_field_access_infer runtime_cl "toString" expr.epos [], [run expr] ) }
 
