@@ -58,6 +58,7 @@ build_script:
     - 'set HAXEPATH=%APPVEYOR_BUILD_FOLDER%'
     - '%CYG_ROOT%/bin/bash -lc "cd \"$OLDPWD\" && make -s -f Makefile.win package_bin"'
     - '%CYG_ROOT%/bin/bash -lc "cd \"$OLDPWD\" && make -s -f Makefile.win package_choco"'
+    - '%CYG_ROOT%/bin/bash -lc "cd \"$OLDPWD\" && make -s -f Makefile.win package_win_installer"'
     - move out\haxe.*.nupkg .
     - dir %APPVEYOR_BUILD_FOLDER%\out
     - cd %APPVEYOR_BUILD_FOLDER%/tests/
@@ -78,3 +79,4 @@ test_script:
 artifacts:
     - path: 'out/*.zip'
     - path: '*.nupkg'
+    - path: 'win-installer/haxe-*.exe'

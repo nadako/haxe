@@ -9,6 +9,7 @@
 *.exe
 .*.swp
 /out
+/win-installer
 
 /extra/hxclasses
 /extra/*.swf

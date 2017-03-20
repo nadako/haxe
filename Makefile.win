@@ -37,6 +37,8 @@ CC_PARSER_CMD=($(OCAMLOPT) -pp camlp4o $(ALL_CFLAGS) -c src/syntax/parser.ml 2>t
 endif
 
 PACKAGE_FILES=$(OUTPUT) haxelib$(EXTENSION) std "$$(cygpath -w "$$(which zlib1.dll)")" "$$(cygpath -w "$$(which libpcre-1.dll)")"
+NSIS_PATH=C:\Program Files (x86)\NSIS
+NEKO_PATH=../neko
 
 package_win:
 	mkdir -p out
@@ -52,6 +54,17 @@ package_win:
 	7z a -r -tzip out/$(PACKAGE_FILE_NAME)_bin.zip $(PACKAGE_FILE_NAME) > log.txt || type log.txt
 	rm -r $(PACKAGE_FILE_NAME)
 	rm log.txt extra/log.txt
+
+package_win_installer:
+	mkdir -p win-installer/resources/haxe
+	cp -r $(PACKAGE_FILES) win-installer/resources/haxe
+	mkdir -p win-installer/resources/neko
+	cp -r $(NEKO_PATH)/* win-installer/resources/neko
+	cp extra/EnvVarUpdate.nsh win-installer
+	mkdir -p win-installer/images
+	cp -r extra/images/* win-installer/images
+	sed -e 's/%%\(VERSION\|VERSTRING\|VERLONG\)%%/$(HAXE_VERSION)/g' extra/installer.nsi > win-installer/installer.nsi
+	"$(NSIS_PATH)/makensis" win-installer/installer.nsi
 
 package_choco:
 	mkdir -p OUTPUT
