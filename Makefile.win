@@ -38,7 +38,7 @@ endif
 
 PACKAGE_FILES=$(OUTPUT) haxelib$(EXTENSION) std "$$(cygpath -w "$$(which zlib1.dll)")" "$$(cygpath -w "$$(which libpcre-1.dll)")"
 NSIS_PATH=C:\Program Files (x86)\NSIS
-NEKO_PATH=../neko
+INSTALLER_NEKO=http://nekovm.org/media/neko-2.1.0-win.zip
 
 package_win:
 	mkdir -p out
@@ -58,8 +58,9 @@ package_win:
 package_win_installer:
 	mkdir -p win-installer/resources/haxe
 	cp -r $(PACKAGE_FILES) win-installer/resources/haxe
-	mkdir -p win-installer/resources/neko
-	cp -r $(NEKO_PATH)/* win-installer/resources/neko
+	curl -fsS -o neko_bin.zip --retry 3 $(INSTALLER_NEKO)
+	7z x neko_bin.zip -owin-installer/resources
+	mv win-installer/resources/neko-* win-installer/resources/neko
 	cp extra/EnvVarUpdate.nsh win-installer
 	mkdir -p win-installer/images
 	cp -r extra/images/* win-installer/images
