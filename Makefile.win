@@ -65,6 +65,7 @@ package_win_installer:
 	mkdir -p win-installer/images
 	cp -r extra/images/* win-installer/images
 	sed -e 's/%%\(VERSION\|VERSTRING\|VERLONG\)%%/$(HAXE_VERSION)/g' extra/installer.nsi > win-installer/installer.nsi
+	msbuild extra\setup.sln /logger:"C:\Program Files\AppVeyor\BuildAgent\Appveyor.MSBuildLogger.dll"
 	"$(NSIS_PATH)/makensis" win-installer/installer.nsi
 
 package_choco:

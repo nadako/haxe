@@ -59,22 +59,23 @@ build_script:
     - '%CYG_ROOT%/bin/bash -lc "cd \"$OLDPWD\" && make -s -f Makefile.win package_bin"'
     - '%CYG_ROOT%/bin/bash -lc "cd \"$OLDPWD\" && make -s -f Makefile.win package_choco"'
     - '%CYG_ROOT%/bin/bash -lc "cd \"$OLDPWD\" && make -s -f Makefile.win package_win_installer"'
+    - dir extra
     - move out\haxe.*.nupkg .
     - dir %APPVEYOR_BUILD_FOLDER%\out
-    - cd %APPVEYOR_BUILD_FOLDER%/tests/
-    - mkdir "%HAXELIB_ROOT%"
-    - haxelib setup "%HAXELIB_ROOT%"
-    # setup mysql for testing
-    - set PATH=%MYSQL_PATH%\bin;%PATH%
-    - mysql --user=%MYSQL_USER% --password=%MYSQL_PASSWORD% -e "create user 'travis'@'localhost';"
-    - mysql --user=%MYSQL_USER% --password=%MYSQL_PASSWORD% -e "create database haxe_test;"
-    - mysql --user=%MYSQL_USER% --password=%MYSQL_PASSWORD% -e "grant all on haxe_test.* to 'travis'@'localhost';"
+    # - cd %APPVEYOR_BUILD_FOLDER%/tests/
+    # - mkdir "%HAXELIB_ROOT%"
+    # - haxelib setup "%HAXELIB_ROOT%"
+    # # setup mysql for testing
+    # - set PATH=%MYSQL_PATH%\bin;%PATH%
+    # - mysql --user=%MYSQL_USER% --password=%MYSQL_PASSWORD% -e "create user 'travis'@'localhost';"
+    # - mysql --user=%MYSQL_USER% --password=%MYSQL_PASSWORD% -e "create database haxe_test;"
+    # - mysql --user=%MYSQL_USER% --password=%MYSQL_PASSWORD% -e "grant all on haxe_test.* to 'travis'@'localhost';"
 
 test_script:
-    - cd %APPVEYOR_BUILD_FOLDER%/tests/
-    - haxe -version
-    - haxe RunCi.hxml
-    - neko RunCi.n
+    # - cd %APPVEYOR_BUILD_FOLDER%/tests/
+    # - haxe -version
+    # - haxe RunCi.hxml
+    # - neko RunCi.n
 
 artifacts:
     - path: 'out/*.zip'
