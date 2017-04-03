@@ -141,7 +141,7 @@ let mk_conversion_fun gen e =
 		tf_type = ret;
 	}
 
-let traverse gen ?tparam_anon_decl ?tparam_anon_acc (handle_anon_func:texpr->tfunc->map_info->t option->texpr) (dynamic_func_call:texpr->texpr) e =
+let traverse gen ?tparam_anon_decl ?tparam_anon_acc (handle_anon_func:texpr->tfunc->map_info->t option->texpr) (handle_method_closure:texpr->tclass->t list->tclass_field->pos->texpr) (handle_static_method_closure:tclass->tclass_field->pos->texpr) (dynamic_func_call:texpr->texpr) e =
 	let info = ref null_map_info in
 	let rec run e =
 		match e.eexpr with
@@ -249,6 +249,21 @@ let traverse gen ?tparam_anon_decl ?tparam_anon_acc (handle_anon_func:texpr->tfu
 						fun e -> mk_castfast t e
 				in
 				dynamic_func_call { e with eexpr = TCall(run (may_cast tc), List.map run params) }
+
+			| TField (een, (FEnum (en, field) as ef)) ->
+				let een = run een in
+				(match follow field.ef_type with
+				| TFun _ ->
+					let cl_enum = List.find (function TClassDecl cl when cl.cl_path = en.e_path && Meta.has Meta.Enum cl.cl_meta -> true | _ -> false) gen.gtypes_list in
+					let cl_enum = match cl_enum with TClassDecl cl -> cl | _ -> assert false in
+					let cf = PMap.find field.ef_name cl_enum.cl_statics in
+					handle_static_method_closure cl_enum cf e.epos
+				| _ ->
+					{ e with eexpr = TField (een, ef) })
+			| TField ({eexpr = TTypeExpr _},FStatic (cl, ({cf_kind = Method (MethNormal | MethInline)} as cf))) ->
+				handle_static_method_closure cl cf e.epos
+			| TField (eobj,FClosure(Some (cl,params),({cf_kind = Method (MethNormal | MethInline)} as cf))) ->
+				handle_method_closure (run eobj) cl params cf e.epos
 			| _ -> Type.map_expr run e
 	in
 
@@ -348,7 +363,7 @@ let get_captured expr =
 
 	This means that it also imposes that the dynamic function return types may only be Dynamic or Float, and all other basic types must be converted to/from it.
 *)
-let configure gen ft =
+let configure gen ft (on_method_closure_generated : tclass->tclass_field->string->unit) (on_static_method_closure_generated : tclass->tclass->string->unit) =
 
 	let handle_anon_func fexpr tfunc mapinfo delegate_type : texpr * (tclass * texpr list) =
 		let fexpr = match fexpr.eexpr with
@@ -541,6 +556,206 @@ let configure gen ft =
 			}, clscapt
 	in
 
+	let method_closure_classes = Hashtbl.create 0 in
+
+	let generate_closure_class_path cl cf postfix =
+		let pack, name = cl.cl_path in
+		(* some targets like Java prevents declaring new classes reserved packages like java.*,
+		   and that can happen when we creating a closure class for a target extern, so we prefix the generated package *)
+		let pack = if cl.cl_extern then "_hxextern" :: pack else pack in
+		pack, (Printf.sprintf "%s_%s__%s" name cf.cf_name postfix)
+	in
+
+	let generate_method_closure_cl cl cf =
+		let pos = cf.cf_pos in
+
+		let path = generate_closure_class_path cl cf "MethodClosure" in
+
+		try Hashtbl.find method_closure_classes path with Not_found -> begin
+			let cl_closure = mk_class cl.cl_module path pos in
+
+			Hashtbl.add method_closure_classes path cl_closure;
+			gen.gadd_to_module (TClassDecl cl_closure) priority;
+
+			cl_closure.cl_meta <- (Meta.Final,[],pos) :: cl_closure.cl_meta;
+			cl_closure.cl_params <- cl.cl_params;
+			cl_closure.cl_super <- Some(ft.func_class, []);
+
+			let cltypes = List.map snd cl.cl_params in
+			let t_obj = TInst (cl,cltypes) in
+			let cf_obj = mk_class_field "obj" t_obj true pos (Var {v_read = AccNormal; v_write = AccNever }) [] in
+			cf_obj.cf_meta <- (Meta.ReadOnly,[],pos) :: cf_obj.cf_meta;
+
+			cl_closure.cl_fields <- PMap.add cf_obj.cf_name cf_obj cl_closure.cl_fields;
+			cl_closure.cl_ordered_fields <- cf_obj :: cl_closure.cl_ordered_fields;
+
+			let erase_method_tparams = apply_params cf.cf_params (List.map (fun _ -> t_dynamic) cf.cf_params) in
+
+			let t_method = erase_method_tparams cf.cf_type in
+
+			let arg_vars, ret = match cf.cf_expr with
+			| Some { eexpr = TFunction tf } ->
+				let vars = List.map (fun (v,_) -> alloc_var v.v_name (erase_method_tparams v.v_type)) tf.tf_args in
+				vars, (erase_method_tparams tf.tf_type)
+			| None -> (* extern method - get args from the type *)
+				let args, ret = get_fun t_method in
+				let vars = List.map (fun (n,_,t) -> alloc_var n t) args in
+				vars, ret
+			| Some _ ->
+				assert false
+			in
+			let callargs = List.map (fun v -> mk_local v pos) arg_vars in
+			let funargs = List.map (fun v -> (v,None)) arg_vars in
+
+			let e_this = mk (TConst TThis) (TInst (cl_closure,cltypes)) pos in
+
+			let e_this_obj = mk (TField (e_this,FInstance (cl_closure,cltypes,cf_obj))) t_obj pos in
+			let e_this_obj_method = mk (TField (e_this_obj, FInstance (cl,cltypes,cf))) t_method pos in
+
+			let ecall = mk (TCall (e_this_obj_method, callargs)) ret pos in
+
+			let tfunc = {
+				tf_args = funargs;
+				tf_type = ret;
+				tf_expr = if ExtType.is_void ret then ecall else mk_return ecall;
+			} in
+			let invoke_field, super_args = ft.closure_to_classfield tfunc t_method pos in
+
+			cl_closure.cl_ordered_fields <- invoke_field :: cl_closure.cl_ordered_fields;
+			cl_closure.cl_fields <- PMap.add invoke_field.cf_name invoke_field cl_closure.cl_fields;
+			cl_closure.cl_overrides <- invoke_field :: cl_closure.cl_overrides;
+
+			let super_call = {
+				eexpr = TCall({ eexpr = TConst(TSuper); etype = TInst(ft.func_class,[]); epos = pos }, super_args);
+				etype = gen.gcon.basic.tvoid;
+				epos = pos;
+			} in
+
+			let v_ctor_obj = alloc_var cf_obj.cf_name cf_obj.cf_type in
+			let ctor_type = (TFun([(v_ctor_obj.v_name,false,v_ctor_obj.v_type)], gen.gcon.basic.tvoid)) in
+
+			let eassign = mk (TBinop (OpAssign,e_this_obj,mk_local v_ctor_obj pos)) v_ctor_obj.v_type pos in
+
+			let ctor = mk_class_field "new" ctor_type true pos (Method(MethNormal)) [] in
+			ctor.cf_expr <- Some(
+			{
+				eexpr = TFunction(
+				{
+					tf_args = [(v_ctor_obj,None)];
+					tf_type = gen.gcon.basic.tvoid;
+					tf_expr = { eexpr = TBlock [super_call;eassign]; etype = gen.gcon.basic.tvoid; epos = pos }
+				});
+				etype = ctor_type;
+				epos = pos;
+			});
+			cl_closure.cl_constructor <- Some(ctor);
+
+			on_method_closure_generated cl_closure cf_obj cf.cf_name;
+
+			cl_closure
+		end
+	in
+	let handle_method_closure eobj cl params cf pos =
+		let rec loop cl params cf =
+			let search_super = (not (List.memq cf cl.cl_ordered_fields)) || (List.memq cf cl.cl_overrides) in
+			if not search_super then
+				cl, params, cf
+			else begin
+				let cl_sup, params_sup = Option.get cl.cl_super in
+				let tl = List.map (apply_params cl.cl_params params) params_sup in
+				loop cl_sup tl (try PMap.find cf.cf_name cl_sup.cl_fields with Not_found -> cf)
+			end
+		in
+		let cl, params, cf = loop cl params cf in
+		let cl_closure = generate_method_closure_cl cl cf in
+		mk (TNew (cl_closure,params,[eobj])) (TInst (cl_closure,params)) pos
+	in
+
+	let static_method_closure_classes = Hashtbl.create 0 in
+
+	let generate_static_method_closure_cl cl cf =
+		let pos = cf.cf_pos in
+
+		let path = generate_closure_class_path cl cf "StaticMethodClosure" in
+
+		try Hashtbl.find static_method_closure_classes path with Not_found -> begin
+			let cl_closure = mk_class cl.cl_module path pos in
+			let cache_var = mk_internal_name "hx" "current" in
+			let cache_cf = mk_class_field cache_var (TInst(cl_closure,[])) false pos (Var({ v_read = AccNormal; v_write = AccNormal })) [] in
+
+			Hashtbl.add static_method_closure_classes path (cl_closure, cache_cf);
+			gen.gadd_to_module (TClassDecl cl_closure) priority;
+
+			cl_closure.cl_meta <- (Meta.Final,[],pos) :: cl_closure.cl_meta;
+			cl_closure.cl_params <- cl.cl_params;
+			cl_closure.cl_super <- Some(ft.func_class, []);
+
+			let t_method = apply_params cf.cf_params (List.map (fun _ -> t_dynamic) cf.cf_params) cf.cf_type in
+			let callargs, funargs, ret = match t_method with
+			| TFun (args,ret) ->
+				let vars = List.map (fun (n,o,t) -> alloc_var n t) args in
+				let callargs = List.map (fun v -> mk_local v pos) vars in
+				let funargs = List.map (fun v -> (v,None)) vars in
+				callargs, funargs, ret
+			| other -> print_endline (debug_type other); assert false
+			in
+
+			let e_obj = ExprBuilder.make_static_this cl pos in
+			let e_obj_method = mk (TField (e_obj, FStatic (cl,cf))) t_method pos in
+
+			let ecall = mk (TCall (e_obj_method, callargs)) ret pos in
+
+			let tfunc = {
+				tf_args = funargs;
+				tf_type = ret;
+				tf_expr = if ExtType.is_void ret then ecall else mk_return ecall;
+			} in
+			let invoke_field, super_args = ft.closure_to_classfield tfunc t_method pos in
+
+			cl_closure.cl_ordered_fields <- invoke_field :: cl_closure.cl_ordered_fields;
+			cl_closure.cl_fields <- PMap.add invoke_field.cf_name invoke_field cl_closure.cl_fields;
+			cl_closure.cl_overrides <- invoke_field :: cl_closure.cl_overrides;
+
+			let super_call = {
+				eexpr = TCall({ eexpr = TConst(TSuper); etype = TInst(ft.func_class,[]); epos = pos }, super_args);
+				etype = gen.gcon.basic.tvoid;
+				epos = pos;
+			} in
+
+
+			cl_closure.cl_ordered_statics <- cache_cf :: cl_closure.cl_ordered_statics;
+			cl_closure.cl_statics <- PMap.add cache_var cache_cf cl_closure.cl_statics;
+
+			let ctor_type = (TFun([], gen.gcon.basic.tvoid)) in
+			let ctor = mk_class_field "new" ctor_type true pos (Method(MethNormal)) [] in
+			ctor.cf_expr <- Some(
+			{
+				eexpr = TFunction(
+				{
+					tf_args = [];
+					tf_type = gen.gcon.basic.tvoid;
+					tf_expr = super_call
+				});
+				etype = ctor_type;
+				epos = pos;
+			});
+			cl_closure.cl_constructor <- Some(ctor);
+
+			on_static_method_closure_generated cl_closure cl cf.cf_name;
+
+			cl_closure, cache_cf
+		end
+	in
+	let handle_static_method_closure cl cf pos =
+		let cl_closure, cf_cache = generate_static_method_closure_cl cl cf in
+		let e_new = mk (TNew (cl_closure,[],[])) (TInst (cl_closure,[])) pos in
+		let e_cache = ExprBuilder.make_static_field cl_closure cf_cache pos in
+		let e_cond = mk (TBinop (OpNotEq, e_cache, null e_cache.etype pos)) gen.gcon.basic.tbool pos in
+		let e_assign = mk (TBinop (OpAssign, e_cache, e_new)) e_cache.etype pos in
+		let e_if = mk (TIf (e_cond,e_cache,Some e_assign)) e_cache.etype pos in
+		e_if
+	in
+
 	let tvar_to_cdecl = Hashtbl.create 0 in
 
 	let run = traverse
@@ -596,6 +811,8 @@ let configure gen ft =
 		)
 		(* (handle_anon_func:texpr->tfunc->texpr) (dynamic_func_call:texpr->texpr->texpr list->texpr) *)
 		(fun e f info delegate_type -> fst (handle_anon_func e f info delegate_type))
+		handle_method_closure
+		handle_static_method_closure
 		ft.dynamic_fun_call
 		(* (dynamic_func_call:texpr->texpr->texpr list->texpr) *)
 	in

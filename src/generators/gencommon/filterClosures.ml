@@ -53,7 +53,7 @@ let configure gen (should_change:texpr->string->bool) (filter:texpr->texpr->stri
 					{ e with eexpr = TCall(local, [Type.map_expr run del]) }
 				| TCall(({ eexpr = TField(_, _) } as ef), params) ->
 					{ e with eexpr = TCall(Type.map_expr run ef, List.map run params) }
-				| TField(ef, FEnum(en, field)) ->
+				(*| TField(ef, FEnum(en, field)) ->
 						(* FIXME replace t_dynamic with actual enum Anon field *)
 						let ef = run ef in
 						(match follow field.ef_type with
@@ -61,8 +61,8 @@ let configure gen (should_change:texpr->string->bool) (filter:texpr->texpr->stri
 								filter e ef field.ef_name true
 							| _ ->
 									{ e with eexpr = TField(ef, FEnum(en,field)) }
-						)
-				| TField(({ eexpr = TTypeExpr _ } as tf), f) ->
+						)*)
+				(*| TField(({ eexpr = TTypeExpr _ } as tf), f) ->
 					(match field_access_esp gen tf.etype (f) with
 						| FClassField(_,_,_,cf,_,_,_) ->
 							(match cf.cf_kind with
@@ -74,13 +74,13 @@ let configure gen (should_change:texpr->string->bool) (filter:texpr->texpr->stri
 								| _ ->
 									e
 							)
-						| _ -> e)
-				| TField(e1, FClosure (Some _, cf)) when should_change e1 cf.cf_name ->
+						| _ -> e)*)
+				(*| TField(e1, FClosure (Some _, cf)) when should_change e1 cf.cf_name ->
 					(match cf.cf_kind with
 					| Method MethDynamic | Var _ ->
 						Type.map_expr run e
 					| _ ->
-						filter e (run e1) cf.cf_name false)
+						filter e (run e1) cf.cf_name false)*)
 				| _ -> Type.map_expr run e
 	in
 	gen.gexpr_filters#add name (PCustom priority) run

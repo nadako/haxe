@@ -132,12 +132,11 @@ import cs.system.reflection.*;
 		if (f1 == f2)
 			return true;
 
-		if (Std.is(f1, Closure) && Std.is(f2, Closure))
-		{
-			var f1c:Closure = cast f1;
-			var f2c:Closure = cast f2;
-
-			return Runtime.refEq(f1c.obj, f2c.obj) && f1c.field == f2c.field;
+		var f1Fun = cs.Lib.as(f1, Function);
+		if (f1Fun != null) {
+			var f2Fun = cs.Lib.as(f2, Function);
+			if (f2Fun != null)
+				return untyped f1Fun.Equals(f2Fun);
 		}
 
 		return false;

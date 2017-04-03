@@ -29,6 +29,7 @@ open Gencommon.SourceWriter
 open Printf
 open Option
 open ExtString
+open Codegen
 
 let is_boxed_type t = match follow t with
 	| TInst ({ cl_path = (["java";"lang"], "Boolean") }, [])
@@ -2289,8 +2290,109 @@ let generate con =
 	let cl_arg_exc = get_cl (get_type gen (["java";"lang"],"IllegalArgumentException")) in
 	let cl_arg_exc_t = TInst (cl_arg_exc, []) in
 	let mk_arg_exception msg pos = mk (TNew (cl_arg_exc, [], [ExprBuilder.make_string gen.gcon msg pos])) cl_arg_exc_t pos in
+
+	let on_method_closure_generated cl cf field =
+		let pos = cl.cl_pos in
+		let com = gen.gcon in
+
+		let t_params = List.map (fun (n,t) -> t) cl.cl_params in
+		let t_closure = TInst (cl, t_params) in
+		let e_this = mk (TConst TThis) t_closure pos in
+		let e_this_obj = mk (TField (e_this,FInstance (cl,t_params,cf))) cf.cf_type pos in
+
+		begin
+			let t_equals = TFun ([("other",false,t_dynamic)],com.basic.tbool) in
+			let cf_equals = mk_class_field "equals" t_equals true pos (Method MethNormal) [] in
+			cl.cl_ordered_fields <- cf_equals :: cl.cl_ordered_fields;
+			cl.cl_fields <- PMap.add cf_equals.cf_name cf_equals cl.cl_fields;
+
+			let v_obj = alloc_var "other" t_dynamic in
+			let e_obj = mk_local v_obj pos in
+			let e_is = mk (TIdent "__is__") t_dynamic pos in
+			let e_typecheck = mk (TCall (e_is,[e_obj;ExprBuilder.make_static_this cl pos])) com.basic.tbool pos in
+			let e_obj_casted = mk_cast t_closure e_obj in
+			let e_check =
+				mk (TBinop (OpEq,
+					e_this_obj,
+					mk (TField (e_obj_casted,FInstance (cl,t_params,cf))) cf.cf_type pos
+				)) com.basic.tbool pos
+			in
+			let e_if = mk (TIf (
+				e_typecheck,
+				mk_return e_check,
+				Some (mk_return (ExprBuilder.make_bool com false pos))
+			)) com.basic.tvoid pos in
+
+			cf_equals.cf_expr <- Some (mk (TFunction {
+				tf_args = [(v_obj,None)];
+				tf_type = com.basic.tbool;
+				tf_expr = e_if;
+			}) t_equals pos)
+		end;
+		begin
+			let t_hashcode = TFun ([],com.basic.tint) in
+			let cf_hashcode = mk_class_field "hashCode" t_hashcode true pos (Method MethNormal) [] in
+			cl.cl_ordered_fields <- cf_hashcode :: cl.cl_ordered_fields;
+			cl.cl_fields <- PMap.add cf_hashcode.cf_name cf_hashcode cl.cl_fields;
+
+			let e_obj_hashcode = mk (TCall ((mk_field_access gen e_this_obj "hashCode" pos),[])) com.basic.tint pos in
+			let e_field = ExprBuilder.make_string com field pos in
+			let e_field_hashcode = mk (TCall ((mk_field_access gen e_field "hashCode" pos),[])) com.basic.tint pos in
+
+			let e_hashcode = mk_return (mk (TBinop (OpXor,e_obj_hashcode,e_field_hashcode)) com.basic.tint pos) in
+
+			cf_hashcode.cf_expr <- Some (mk (TFunction {
+				tf_args = [];
+				tf_type = com.basic.tint;
+				tf_expr = e_hashcode;
+			}) t_hashcode pos)
+		end
+	in
+
+	let on_static_method_closure_generated cl cl_orig field =
+		let pos = cl.cl_pos in
+		let com = gen.gcon in
+
+		begin
+			let t_equals = TFun ([("other",false,t_dynamic)],com.basic.tbool) in
+			let cf_equals = mk_class_field "equals" t_equals true pos (Method MethNormal) [] in
+			cl.cl_ordered_fields <- cf_equals :: cl.cl_ordered_fields;
+			cl.cl_fields <- PMap.add cf_equals.cf_name cf_equals cl.cl_fields;
+
+			let v_obj = alloc_var "other" t_dynamic in
+			let e_obj = mk_local v_obj pos in
+			let e_is = mk (TIdent "__is__") t_dynamic pos in
+			let e_check = mk (TCall (e_is,[e_obj; ExprBuilder.make_static_this cl pos])) com.basic.tbool pos in
+
+			cf_equals.cf_expr <- Some (mk (TFunction {
+				tf_args = [(v_obj,None)];
+				tf_type = com.basic.tbool;
+				tf_expr = mk_return e_check;
+			}) t_equals pos)
+		end;
+		begin
+			let t_hashcode = TFun ([],com.basic.tint) in
+			let cf_hashcode = mk_class_field "hashCode" t_hashcode true pos (Method MethNormal) [] in
+			cl.cl_ordered_fields <- cf_hashcode :: cl.cl_ordered_fields;
+			cl.cl_fields <- PMap.add cf_hashcode.cf_name cf_hashcode cl.cl_fields;
+
+			let e_type = ExprBuilder.make_static_this cl_orig pos in
+			let e_typeof = mk (TCall ((mk (TIdent "__typeof__") t_dynamic pos), [e_type])) t_dynamic pos in
+			let e_type_hashcode = mk (TCall ((mk_field_access gen e_typeof "hashCode" pos),[])) com.basic.tint pos in
+			let e_field = ExprBuilder.make_string com field pos in
+			let e_field_hashcode = mk (TCall ((mk_field_access gen e_field "hashCode" pos),[])) com.basic.tint pos in
+
+			let e_hashcode = mk_return (mk (TBinop (OpXor,e_type_hashcode,e_field_hashcode)) com.basic.tint pos) in
+
+			cf_hashcode.cf_expr <- Some (mk (TFunction {
+				tf_args = [];
+				tf_type = com.basic.tint;
+				tf_expr = e_hashcode;
+			}) t_hashcode pos)
+		end
+	in
 	let closure_t = ClosuresToClass.DoubleAndDynamicClosureImpl.get_ctx gen (get_cl (get_type gen (["haxe";"lang"],"Function"))) 6 mk_arg_exception in
-	ClosuresToClass.configure gen closure_t;
+	ClosuresToClass.configure gen closure_t on_method_closure_generated on_static_method_closure_generated;
 
 	let enum_base = (get_cl (get_type gen (["haxe";"lang"],"Enum")) ) in
 	let param_enum_base = (get_cl (get_type gen (["haxe";"lang"],"ParamEnum")) ) in
