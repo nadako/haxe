@@ -107,6 +107,7 @@ type constant =
 type token =
 	| Eof
 	| Const of constant
+	| Fmt of fmt_string
 	| Kwd of keyword
 	| Comment of string
 	| CommentLine of string
@@ -128,6 +129,17 @@ type token =
 	| Question
 	| At
 	| Dollar of string
+
+and fmt_string = (fmt_token * pos) list
+
+and fmt_token =
+	| Raw of string
+	| Name of string
+	| Code of (fmt_code * pos) list
+
+and fmt_code =
+	| Normal of string
+	| Format of fmt_string
 
 type unop_flag =
 	| Prefix
@@ -175,6 +187,7 @@ and placed_name = string * pos
 
 and expr_def =
 	| EConst of constant
+	| EFormat of fmt_string
 	| EArray of expr * expr
 	| EBinop of binop * expr * expr
 	| EField of expr * string
@@ -205,6 +218,11 @@ and expr_def =
 	| EMeta of metadata_entry * expr
 
 and expr = expr_def * pos
+
+and format_part =
+	| FmtRaw of string
+	| FmtIdent of string * pos
+	| FmtExpr of expr
 
 and type_param = {
 	tp_name : placed_name;
@@ -448,9 +466,23 @@ let s_unop = function
 	| Neg -> "-"
 	| NegBits -> "~"
 
+let rec s_fmt pl =
+	let pl = List.map (fun p -> match fst p with
+		| Raw s -> s
+		| Name s -> "$" ^ s
+		| Code tl ->
+			let tl = List.map (fun p -> match fst p with
+				| Normal s -> s
+				| Format pl -> "'" ^ (s_fmt pl) ^ "'"
+			) tl in
+			"${" ^ (String.concat "" tl) ^ "}"
+	) pl in
+	String.concat "" pl
+
 let s_token = function
 	| Eof -> "<end of file>"
 	| Const c -> s_constant c
+	| Fmt pl -> "'" ^ (s_fmt pl) ^ "'"
 	| Kwd k -> s_keyword k
 	| Comment s -> "/*"^s^"*/"
 	| CommentLine s -> "//"^s
@@ -582,7 +614,7 @@ let map_expr loop (e,p) =
 	and tpath (t,p) = { t with tparams = List.map tparam t.tparams },p
 	in
 	let e = (match e with
-	| EConst _ -> e
+	| EConst _ | EFormat _ -> e
 	| EArray (e1,e2) ->
 		let e1 = loop e1 in
 		let e2 = loop e2 in
@@ -667,7 +699,7 @@ let iter_expr loop (e,p) =
 	let opt eo = match eo with None -> () | Some e -> loop e in
 	let exprs = List.iter loop in
 	match e with
-	| EConst _ | EContinue | EBreak | EDisplayNew _ | EReturn None -> ()
+	| EConst _ | EFormat _ | EContinue | EBreak | EDisplayNew _ | EReturn None -> ()
 	| EParenthesis e1 | EField(e1,_) | EUnop(_,_,e1) | EReturn(Some e1) | EThrow e1 | EMeta(_,e1)
 	| ECheckType(e1,_) | EDisplay(e1,_) | ECast(e1,_) | EUntyped e1 -> loop e1;
 	| EArray(e1,e2) | EBinop(_,e1,e2) | EFor(e1,e2) | EWhile(e1,e2,_) | EIf(e1,e2,None) -> loop e1; loop e2;
@@ -699,6 +731,7 @@ let s_expr e =
 	let rec s_expr_inner tabs (e,_) =
 		match e with
 		| EConst c -> s_constant c
+		| EFormat fmt -> "'" ^ (s_fmt fmt) ^ "'"
 		| EArray (e1,e2) -> s_expr_inner tabs e1 ^ "[" ^ s_expr_inner tabs e2 ^ "]"
 		| EBinop (op,e1,e2) -> s_expr_inner tabs e1 ^ " " ^ s_binop op ^ " " ^ s_expr_inner tabs e2
 		| EField (e,f) -> s_expr_inner tabs e ^ "." ^ f

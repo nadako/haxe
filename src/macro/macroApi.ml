@@ -77,6 +77,7 @@ type enum_type =
 	| IAnonStatus
 	| IQuoteStatus
 	| IImportMode
+	| IFormatSegmentKind
 
 type obj_type =
 	(* make_const *)
@@ -95,6 +96,7 @@ type obj_type =
 	| OCase
 	| OCatch
 	| OExpr
+	| OFormatSegment
 	(* Type *)
 	| OMetaAccess
 	| OTypeParameter
@@ -215,6 +217,7 @@ let enum_name = function
 	| IAnonStatus -> "AnonStatus"
 	| IImportMode -> "ImportMode"
 	| IQuoteStatus -> "QuoteStatus"
+	| IFormatSegmentKind -> "FormatSegmentKind"
 
 let proto_name = function
 	| O__Const -> assert false
@@ -231,6 +234,7 @@ let proto_name = function
 	| OCase -> "Case", None
 	| OCatch -> "Catch", None
 	| OExpr -> "Expr", None
+	| OFormatSegment -> "FormatSegment", None
 	| OMetaAccess -> "MetaAccess", None
 	| OTypeParameter -> "TypeParameter", None
 	| OClassType -> "ClassType", None
@@ -262,7 +266,7 @@ let proto_name = function
 	| ORef -> "Ref", None
 
 let all_enums =
-	let last = IImportMode in
+	let last = IFormatSegmentKind in
 	let rec loop i =
 		let e : enum_type = Obj.magic i in
 		if e = last then [e] else e :: loop (i + 1)
@@ -365,6 +369,9 @@ let encode_import (path,mode) =
 
 let encode_placed_name (s,p) =
 	encode_string s
+
+let encode_and_map_array convert l =
+	encode_array (List.map convert l)
 
 let rec encode_path (t,_) =
 	let fields = [
@@ -550,6 +557,8 @@ and encode_expr e =
 				27, [loop e; encode_ctype t]
 			| EMeta (m,e) ->
 				28, [encode_meta_entry m;loop e]
+			| EFormat fmt ->
+				29, [encode_string (s_fmt fmt)]
 		in
 		encode_obj OExpr [
 			"pos", encode_pos p;
@@ -817,8 +826,9 @@ and decode_expr v =
 			ECheckType (loop e, (decode_ctype t))
 		| 28, [m;e] ->
 			EMeta (decode_meta_entry m,loop e)
-		| 29, [e;f] ->
-			EField (loop e, decode_string f) (*** deprecated EType, keep until haxe 3 **)
+		| 29, [s] ->
+			let s = decode_string s in
+			EFormat [(Raw s,Globals.null_pos)]
 		| _ ->
 			raise Invalid_expr
 	in
@@ -827,6 +837,14 @@ and decode_expr v =
 	with Stack_overflow ->
 		raise Invalid_expr
 
+and decode_format_part v =
+	let p = decode_pos (field v "pos") in
+	(match decode_enum (field v "kind") with
+	| 0, [vs] -> FmtRaw (decode_string vs)
+	| 1, [vs;vp] -> FmtIdent (decode_string vs,decode_pos vp)
+	| 2, [ve] -> FmtExpr (decode_expr ve)
+	| _ -> raise Invalid_expr),p
+
 (* ---------------------------------------------------------------------- *)
 (* TYPE ENCODING *)
 
@@ -834,9 +852,6 @@ let encode_pmap_array convert m =
 	let l = ref [] in
 	PMap.iter (fun _ v -> l := !l @ [(convert v)]) m;
 	encode_array !l
-
-let encode_and_map_array convert l =
-	encode_array (List.map convert l)
 
 let vopt f v = match v with
 	| None -> vnull
@@ -1611,9 +1626,6 @@ let macro_api ccom get_api =
 		"s_expr", vfun2 (fun v b ->
 			let f = if decode_opt_bool b then Type.s_expr_pretty false "" false else Type.s_expr_ast true "" in
 			encode_string (f (Type.s_type (print_context())) (decode_texpr v))
-		);
-		"is_fmt_string", vfun1 (fun p ->
-			vbool (Lexer.is_fmt_string (decode_pos p))
 		);
 		"format_string", vfun2 (fun s p ->
 			encode_expr ((get_api()).format_string (decode_string s) (decode_pos p))
