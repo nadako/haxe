@@ -2774,101 +2774,60 @@ and type_vars ctx vl p =
 		let e = mk (TBlock (List.map (fun (v,e) -> (mk (TVar (v,e)) ctx.t.tvoid p)) vl)) ctx.t.tvoid p in
 		mk (TMeta((Meta.MergeBlock,[],p), e)) e.etype e.epos
 
-and format_string ctx s p =
-	let e = ref None in
-	let pmin = ref p.pmin in
-	let min = ref (p.pmin + 1) in
-	let add_expr (enext,p) len =
-		min := !min + len;
-		let enext = if ctx.in_display && Display.is_display_position p then
-			Display.ExprPreprocessing.process_expr ctx.com (enext,p)
+and format_string ctx fmt p =
+	let concat e1 e2 = (EBinop (OpAdd,e1,e2), (punion (pos e1) (pos e2))) in
+
+	let handle_display e =
+		if ctx.in_display && Display.is_display_position (pos e) then
+			Display.ExprPreprocessing.process_expr ctx.com e
 		else
-			enext,p
+			e
+	in
+
+	let lex code start =
+		let code_lexbuf = Sedlexing.Utf8.from_string code in
+		let rec loop acc =
+			match Lexer.token code_lexbuf with
+			| (Eof,_) -> acc
+			| (tok,p) ->
+				let tok = tok, {p with pmin = p.pmin + start; pmax = p.pmax + start} in
+				loop (tok :: acc)
 		in
-		match !e with
-		| None -> e := Some enext
-		| Some prev ->
-			e := Some (EBinop (OpAdd,prev,enext),punion (pos prev) p)
+		List.rev (loop [])
 	in
-	let add enext len =
-		let p = { p with pmin = !min; pmax = !min + len } in
-		add_expr (enext,p) len
-	in
-	let add_sub start pos =
-		let len = pos - start in
-		if len > 0 || !e = None then add (EConst (String (String.sub s start len,Double))) len
-	in
-	let warn_escape = Common.defined ctx.com Define.FormatWarning in
-	let warn pos len =
-		ctx.com.warning "This string is formated" { p with pmin = !pmin + 1 + pos; pmax = !pmin + 1 + pos + len }
-	in
-	let len = String.length s in
-	let rec parse start pos =
-		if pos = len then add_sub start pos else
-		let c = String.unsafe_get s pos in
-		let pos = pos + 1 in
-		if c = '\'' then begin
-			incr pmin;
-			incr min;
-		end;
-		if c <> '$' || pos = len then parse start pos else
-		match String.unsafe_get s pos with
-		| '$' ->
-			if warn_escape then warn pos 1;
-			(* double $ *)
-			add_sub start pos;
-			parse (pos + 1) (pos + 1)
-		| '{' ->
-			parse_group start pos '{' '}' "brace"
-		| 'a'..'z' | 'A'..'Z' | '_' ->
-			add_sub start (pos - 1);
-			incr min;
-			let rec loop i =
-				if i = len then i else
-				let c = String.unsafe_get s i in
-				match c with
-				| 'a'..'z' | 'A'..'Z' | '0'..'9' | '_' -> loop (i+1)
-				| _ -> i
-			in
-			let iend = loop (pos + 1) in
-			let len = iend - pos in
-			if warn_escape then warn pos len;
-			add (EConst (Ident (String.sub s pos len))) len;
-			parse (pos + len) (pos + len)
-		| _ ->
-			(* keep as-it *)
-			parse start pos
-	and parse_group start pos gopen gclose gname =
-		add_sub start (pos - 1);
-		let rec loop groups i =
-			if i = len then
-				match groups with
-				| [] -> assert false
-				| g :: _ -> error ("Unclosed " ^ gname) { p with pmin = !pmin + g + 1; pmax = !pmin + g + 2 }
-			else
-				let c = String.unsafe_get s i in
-				if c = gopen then
-					loop (i :: groups) (i + 1)
-				else if c = gclose then begin
-					let groups = List.tl groups in
-					if groups = [] then i else loop groups (i + 1)
-				end else
-					loop groups (i + 1)
-		in
-		let send = loop [pos] (pos + 1) in
-		let slen = send - pos - 1 in
-		let scode = String.sub s (pos + 1) slen in
-		if warn_escape then warn (pos + 1) slen;
-		min := !min + 2;
-		if slen > 0 then
-			add_expr (Parser.parse_expr_string ctx.com.defines scode { p with pmin = !pmin + pos + 2; pmax = !pmin + send + 1 } error true) slen;
-		min := !min + 1;
-		parse (send + 1) (send + 1)
-	in
-	parse 0 0;
-	match !e with
-	| None -> assert false
-	| Some e -> e
+
+
+	let empty_string_expr = EConst (String ("",Single)),p in
+	let edef,_ = List.fold_left (fun e (part,part_pos) ->
+		print_endline (Ast.s_part part);
+		match part with
+		| FTRaw s ->
+			let e2 = (EConst (String (s,Single)),part_pos) in
+			let e2 = handle_display e2 in
+			if e == empty_string_expr then e2 else concat e e2
+		| FTIdent i ->
+			let e2 = (EConst (Ident i),{part_pos with pmin = part_pos.pmin + 1 (* omit dollar sign *)}) in
+			let e2 = handle_display e2 in
+			concat e e2
+		| FTCode parts ->
+			let tokens = List.fold_left (fun acc (part,part_pos) ->
+				match part with
+				| FCRaw s ->
+					acc @ (lex s part_pos.pmin)
+				| FCFormat s ->
+					acc @ [(Const (String ("",Format s)),part_pos)]
+			) [] parts in
+			print_endline ("`" ^ (String.concat " " (List.map (fun (t,_) -> s_token t) tokens)) ^ "`");
+			if tokens = [] then (
+				let e2 = (EConst (String ("",Single)),part_pos) in
+				if e == empty_string_expr then e2 else concat e e2
+			) else (
+				let s = Stream.of_list tokens in
+				let e2 = try Parser.expr s with Parser.Display e2 -> e2 in
+				concat e e2
+			)
+	) empty_string_expr fmt in
+	edef,p
 
 and type_block ctx el with_type p =
 	let merge e = match e.eexpr with
@@ -3406,8 +3365,8 @@ and type_expr ctx (e,p) (with_type:with_type) =
 		let opt = mk (TConst (TString opt)) ctx.t.tstring p in
 		let t = Typeload.load_core_type ctx "EReg" in
 		mk (TNew ((match t with TInst (c,[]) -> c | _ -> assert false),[],[str;opt])) t p
-	| EConst (String (s,_)) when s <> "" && Lexer.is_fmt_string p ->
-		type_expr ctx (format_string ctx s p) with_type
+	| EConst (String (orig,Format parts)) ->
+		type_expr ctx (format_string ctx parts p) with_type
 	| EConst c ->
 		Codegen.type_constant ctx.com c p
 	| EBinop (op,e1,e2) ->
@@ -4562,7 +4521,7 @@ let rec create com =
 			do_load_module = Typeload.load_module;
 			do_optimize = Optimizer.reduce_expression;
 			do_build_instance = Typeload.build_instance;
-			do_format_string = format_string;
+			do_format_string = (fun _ _ _ -> assert false); (* TODO *)
 			do_finalize = finalize;
 			do_generate = generate;
 		};

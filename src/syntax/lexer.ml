@@ -269,6 +269,8 @@ let idtype = [%sedlex.regexp? Star '_', 'A'..'Z', Star ('_' | 'a'..'z' | 'A'..'Z
 
 let integer = [%sedlex.regexp? ('1'..'9', Star ('0'..'9')) | '0']
 
+let whitespace = [%sedlex.regexp? Plus (Chars " \t")]
+
 let rec skip_header lexbuf =
 	match%sedlex lexbuf with
 	| 0xfeff -> skip_header lexbuf
@@ -279,7 +281,7 @@ let rec skip_header lexbuf =
 let rec token lexbuf =
 	match%sedlex lexbuf with
 	| eof -> mk lexbuf Eof
-	| Plus (Chars " \t") -> token lexbuf
+	| whitespace -> token lexbuf
 	| "\r\n" -> newline lexbuf; token lexbuf
 	| '\n' | '\r' -> newline lexbuf; token lexbuf
 	| "0x", Plus ('0'..'9'|'a'..'f'|'A'..'F') -> mk lexbuf (Const (Int (lexeme lexbuf)))
@@ -359,11 +361,14 @@ let rec token lexbuf =
 	| "'" ->
 		reset();
 		let pmin = lexeme_start lexbuf in
-		let pmax = (try string2 lexbuf with Exit -> error Unterminated_string pmin) in
-		let str = (try unescape (contents()) with Invalid_escape_sequence(c,i) -> error (Invalid_escape c) (pmin + i)) in
-		let t = mk_tok (Const (String (str,Single))) pmin pmax in
-		fast_add_fmt_string (snd t);
-		t
+		let parts,sparts,pmax = (try string2 (pmin+1) [] [] lexbuf with Exit -> error Unterminated_string pmin) in
+		let str = String.concat "" (List.rev sparts) in
+		let kind =
+			match List.rev parts with
+			| [] | [(FTRaw _,_)] -> Single
+			| parts -> Format parts
+		in
+		mk_tok (Const (String (str,kind))) pmin pmax;
 	| "~/" ->
 		reset();
 		let pmin = lexeme_start lexbuf in
@@ -402,51 +407,87 @@ and string lexbuf =
 	| Plus (Compl ('"' | '\\' | '\r' | '\n')) -> store lexbuf; string lexbuf
 	| _ -> assert false
 
-and string2 lexbuf =
+and string2 pmin parts sparts lexbuf =
+	let consume_part() =
+		let contents = contents() in
+		reset();
+		if contents = "" then
+			parts, sparts
+		else begin
+			let str = (try unescape contents with Invalid_escape_sequence(c,i) -> error (Invalid_escape c) (pmin + i)) in
+			let pmax = pmin + String.length contents in
+			let part = mk_tok (FTRaw str) pmin pmax in
+			part :: parts, contents :: sparts
+		end
+	in
 	match%sedlex lexbuf with
 	| eof -> raise Exit
-	| '\n' | '\r' | "\r\n" -> newline lexbuf; store lexbuf; string2 lexbuf
-	| '\\' -> store lexbuf; string2 lexbuf
-	| "\\\\" -> store lexbuf; string2 lexbuf
-	| "\\'" -> store lexbuf; string2 lexbuf
-	| "'" -> lexeme_end lexbuf
-	| "$$" | "\\$" | '$' -> store lexbuf; string2 lexbuf
-	| "${" ->
+	| '\n' | '\r' | "\r\n" -> newline lexbuf; store lexbuf; string2 pmin parts sparts lexbuf
+	| '\\' -> store lexbuf; string2 pmin parts sparts lexbuf
+	| "\\\\" -> store lexbuf; string2 pmin parts sparts lexbuf
+	| "\\'" -> store lexbuf; string2 pmin parts sparts lexbuf
+	| "'" ->
+		let parts, sparts = consume_part() in
+		parts, sparts, lexeme_end lexbuf
+	| "$$" -> add "$"; string2 pmin parts sparts lexbuf
+	| '$', (ident | idtype) ->
+		let parts, sparts = consume_part() in
 		let pmin = lexeme_start lexbuf in
-		store lexbuf;
-		(try code_string lexbuf 0 with Exit -> error Unclosed_code pmin);
-		string2 lexbuf;
-	| Plus (Compl ('\'' | '\\' | '\r' | '\n' | '$')) -> store lexbuf; string2 lexbuf
+		let pmax = lexeme_end lexbuf in
+		let spart = lexeme lexbuf in
+		let ident = String.sub spart 1 (String.length spart - 1) in
+		let part = mk_tok (FTIdent ident) pmin pmax in
+		string2 pmax (part :: parts) (spart :: sparts) lexbuf
+	| "\\$" | '$' -> store lexbuf; string2 pmin parts sparts lexbuf
+	| "${" ->
+		let parts, sparts = consume_part() in
+		let sparts = "${" :: sparts in
+		let pmin = lexeme_start lexbuf in
+		let start = lexeme_end lexbuf in
+		let tokens,sparts,pmax = (try code_string start lexbuf sparts 0 with Exit -> error Unclosed_code pmin) in
+		let part = mk_tok (FTCode tokens) pmin pmax in
+		string2 pmax (part :: parts) sparts lexbuf
+	| Plus (Compl ('\'' | '\\' | '\r' | '\n' | '$')) -> store lexbuf; string2 pmin parts sparts lexbuf
 	| _ -> assert false
 
-and code_string lexbuf open_braces =
+and code_string start lexbuf sparts open_braces =
+	let consume() =
+		let code = contents() in
+		reset();
+		[mk_tok (FCRaw code) start (start + String.length code)], code
+	in
 	match%sedlex lexbuf with
 	| eof -> raise Exit
-	| '\n' | '\r' | "\r\n" -> newline lexbuf; store lexbuf; code_string lexbuf open_braces
-	| '{' -> store lexbuf; code_string lexbuf (open_braces + 1)
-	| '/' -> store lexbuf; code_string lexbuf open_braces
+	| whitespace -> code_string start lexbuf (lexeme lexbuf :: sparts) open_braces
+	| '\n' | '\r' | "\r\n" -> newline lexbuf; store lexbuf; code_string start lexbuf sparts open_braces
+	| '{' -> store lexbuf; code_string start lexbuf sparts (open_braces + 1)
+	| '/' -> store lexbuf; code_string start lexbuf sparts open_braces
 	| '}' ->
-		store lexbuf;
-		if open_braces > 0 then code_string lexbuf (open_braces - 1)
+		if open_braces > 0 then
+			(store lexbuf; code_string start lexbuf sparts (open_braces - 1))
+		else begin
+			let parts, spart = consume() in
+			parts, "}" :: spart :: sparts, lexeme_end lexbuf
+		end
 	| '"' ->
 		add "\"";
 		let pmin = lexeme_start lexbuf in
 		(try ignore(string lexbuf) with Exit -> error Unterminated_string pmin);
 		add "\"";
-		code_string lexbuf open_braces
+		code_string start lexbuf (contents() :: sparts) open_braces
 	| "'" ->
-		add "'";
+		let parts, spart = consume() in
 		let pmin = lexeme_start lexbuf in
-		let pmax = (try string2 lexbuf with Exit -> error Unterminated_string pmin) in
-		add "'";
-		fast_add_fmt_string { pfile = !cur.lfile; pmin = pmin; pmax = pmax };
-		code_string lexbuf open_braces
+		let tokens,srest,pmax = (try string2 (pmin+1) [] [] lexbuf with Exit -> error Unterminated_string pmin) in
+		let t = mk_tok (FCFormat (List.rev tokens)) pmin pmax in
+		let rest,srest,pmax = code_string start lexbuf srest open_braces in
+		parts @ (t :: rest), spart :: srest,pmax
 	| "/*" ->
 		let pmin = lexeme_start lexbuf in
 		(try ignore(comment lexbuf) with Exit -> error Unclosed_comment pmin);
-		code_string lexbuf open_braces
-	| "//", Star (Compl ('\n' | '\r')) -> store lexbuf; code_string lexbuf open_braces
-	| Plus (Compl ('/' | '"' | '\'' | '{' | '}' | '\n' | '\r')) -> store lexbuf; code_string lexbuf open_braces
+		code_string start lexbuf sparts open_braces
+	| "//", Star (Compl ('\n' | '\r')) -> store lexbuf; code_string start lexbuf sparts open_braces
+	| Plus (Compl ('/' | '"' | '\'' | '{' | '}' | '\n' | '\r')) -> store lexbuf; code_string start lexbuf sparts open_braces
 	| _ -> assert false
 
 and regexp lexbuf =

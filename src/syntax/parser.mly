@@ -172,6 +172,7 @@ let reify in_macro =
 		match k with
 		| Double -> mk_enum "StringKind" "Double" [] p
 		| Single -> mk_enum "StringKind" "Single" [] p
+		| Format _ -> mk_enum "StringKind" "Single" [] p (* TODO *)
 	in
 	let to_const c p =
 		let cst n v = mk_enum "Constant" n [EConst (String (v,Double)),p] p in

@@ -100,6 +100,18 @@ type unop =
 type string_kind =
 	| Double
 	| Single
+	| Format of fmt_string
+
+and fmt_string = (fmt_token * pos) list
+
+and fmt_token =
+	| FTRaw of string
+	| FTIdent of string
+	| FTCode of (fmt_code * pos) list
+
+and fmt_code =
+	| FCRaw of string
+	| FCFormat of fmt_string
 
 type constant =
 	| Int of string
@@ -358,11 +370,20 @@ let s_escape ?(hex=true) ?(single=false) s =
 	done;
 	Buffer.contents b
 
+let rec s_part = function
+	| FTRaw s -> Printf.sprintf "raw(\"%s\")" (s_escape s)
+	| FTIdent i -> Printf.sprintf "ident(%s)" i
+	| FTCode cl -> Printf.sprintf "code(%s)" (String.concat " " (List.map (fun (c,_) -> s_code c) cl))
+and s_code = function
+	| FCRaw s -> Printf.sprintf "craw(\"%s\")" (s_escape s)
+	| FCFormat fl -> Printf.sprintf "cformat(%s)" (String.concat "" (List.map (fun (t,_) -> s_part t) fl))
+
 let s_constant = function
 	| Int s -> s
 	| Float s -> s
 	| String (s,Double) -> "\"" ^ s_escape s ^ "\""
 	| String (s,Single) -> "'" ^ s_escape ~single:true s ^ "'"
+	| String (s,Format fl) -> "fmt'" ^ (String.concat "" (List.map (fun (t,_) -> s_part t) fl)) ^ "'"
 	| Ident s -> s
 	| Regexp (r,o) -> "~/" ^ r ^ "/"
 
