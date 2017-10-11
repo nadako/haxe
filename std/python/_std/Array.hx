@@ -42,8 +42,8 @@ extern class Array<T> implements ArrayAccess<T> {
 		return ArrayImpl.copy(this);
 	}
 
-	@:runtime public inline function iterator() : Iterator<T> {
-		return ArrayImpl.iterator(this);
+	@:runtime public inline function iterator() : ArrayIterator<T> {
+		return new ArrayIterator(this);
 	}
 
 	public inline function insert( pos : Int, x : T ) : Void {

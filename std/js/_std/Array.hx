@@ -67,8 +67,8 @@ extern class Array<T> {
 	function map<S>(f:T->S):Array<S>;
 	function filter(f:T->Bool):Array<T>;
 
-	@:runtime inline function iterator() : Iterator<T> {
-		return @:privateAccess HxOverrides.iter(this);
+	@:runtime inline function iterator() : ArrayIterator<T> {
+		return new ArrayIterator(this);
 	}
 
 }

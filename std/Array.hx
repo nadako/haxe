@@ -153,7 +153,7 @@ extern class Array<T> {
 
 		This operation modifies `this` Array in place.
 
-		If `len` is < 0 or `pos` exceeds `this`.length, an empty Array [] is 
+		If `len` is < 0 or `pos` exceeds `this`.length, an empty Array [] is
 		returned and `this` Array is unchanged.
 
 		If `pos` is negative, its value is calculated from the end	of `this`
@@ -265,7 +265,7 @@ extern class Array<T> {
 	/**
 		Returns an iterator of the Array values.
 	**/
-	function iterator() : Iterator<T>;
+	function iterator() : ArrayIterator<T>;
 
 	/**
 		Creates a new Array by applying function `f` to all elements of `this`.

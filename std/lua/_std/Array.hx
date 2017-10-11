@@ -206,12 +206,8 @@ class Array<T> {
 	public function filter(f:T->Bool):Array<T> {
 		return [for (i in this) if (f(i)) i];
 	}
-	public inline function iterator() : Iterator<T> {
-		var cur_length = 0;
-		return {
-			hasNext : function() return cur_length < length,
-			next : function() return this[cur_length++]
-		}
+	public inline function iterator() : ArrayIterator<T> {
+		return new ArrayIterator(this);
 	}
 	private static function __init__() : Void{
 		// table-to-array helper

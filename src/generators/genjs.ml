@@ -320,7 +320,7 @@ let is_dynamic_iterator ctx e =
 				loop (Abstract.get_underlying_type a tl)
 			| _ -> false
 		in
-		has_feature ctx "HxOverrides.iter" && loop x.etype
+		has_feature ctx "ArrayIterator" && loop x.etype
 	in
 	match e.eexpr with
 	| TField (x,f) when field_name f = "iterator" -> check x
@@ -1524,7 +1524,7 @@ let generate com =
 	List.iter (fun (_,_,e) -> chk_features e) ctx.statics;
 	if has_feature ctx "use.$iterator" then begin
 		add_feature ctx "use.$bind";
-		print ctx "function $iterator(o) { if( o instanceof Array ) return function() { return HxOverrides.iter(o); }; return typeof(o.iterator) == 'function' ? $bind(o,o.iterator) : o.iterator; }";
+		print ctx "function $iterator(o) { if( o instanceof Array ) return function() { return new ArrayIterator(o); }; return typeof(o.iterator) == 'function' ? $bind(o,o.iterator) : o.iterator; }";
 		newline ctx;
 	end;
 	if has_feature ctx "use.$bind" then begin
