@@ -369,9 +369,14 @@ module AbstractCast = struct
 		else begin
 			let rec loop tleft tright = match follow tleft,follow tright with
 			| TAbstract(a1,tl1),TAbstract(a2,tl2) ->
-				begin try find a2 tl2 (fun () -> Abstract.find_to a2 tl2 tleft)
-				with Not_found -> try find a1 tl1 (fun () -> Abstract.find_from a1 tl1 eright.etype tleft)
-				with Not_found -> raise Not_found
+				begin
+					if Abstract.has_direct_to a2 tl2 tleft || Abstract.has_direct_from a1 tl1 eright.etype tleft then
+						raise Not_found
+					else
+						try
+							find a2 tl2 (fun () -> Abstract.find_to a2 tl2 tleft)
+						with Not_found ->
+							find a1 tl1 (fun () -> Abstract.find_from a1 tl1 eright.etype tleft)
 				end
 			| TAbstract(a,tl),_ ->
 				begin try find a tl (fun () -> Abstract.find_from a tl eright.etype tleft)
