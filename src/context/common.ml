@@ -697,3 +697,16 @@ let dump_context com = s_record_fields "" [
 	"defines",s_pmap (fun s -> s) (fun s -> s) com.defines.values;
 	"defines_signature",s_opt (fun s -> Digest.to_hex s) com.defines.defines_signature;
 ]
+
+module FeatureHandler = struct
+	let get_feature_name e = match e.eexpr with
+		| TConst (TString s) -> s
+		| _ -> abort "Feature name must be a String literal" e.epos
+
+	let has_feature com efeature ethen eelseo generate =
+		let feature_name = get_feature_name efeature in
+		if has_feature com feature_name then
+			generate ethen
+		else
+			Option.may generate eelseo
+end

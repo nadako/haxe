@@ -466,3 +466,29 @@ enum abstract IncludePosition(String) from String to String {
 	*/
 	var Inline = "inline";
 }
+
+/**
+	TODO: document features and how DCE adds them here?
+**/
+extern class Features {
+	/**
+		Return whether the current compilation have the `feature` enabled.
+
+		The `feature` argument must be a string literal.
+
+		This function is handled specifically when used within an `if` expression:
+		 - if feature is present, only the "then" branch is generated,
+		 - if feature is NOT present, only the "else" branch is generated, if present,
+		 - otherwise nothing is generated
+	**/
+	@:pure static function hasFeature(feature:String):Bool;
+
+	/**
+		Enable the `feature` for the current compilation.
+
+		The `feature` argument must be a string literal.
+
+		Calls to this function are never generated.
+	**/
+	static function defineFeature(feature:String):Void;
+}

@@ -403,6 +403,8 @@ let rec gen_call ctx e el in_value =
 		gen_syntax ctx "strictNeq" args e.epos
 	| TIdent "__define_feature__", [_;e] ->
 		gen_expr ctx e
+	| TField (_, FStatic ({ cl_path = ["haxe";"macro"],"Features"}, { cf_name = "defineFeature" })), _ ->
+		()
 	| TIdent "__feature__", { eexpr = TConst (TString f) } :: eif :: eelse ->
 		(if has_feature ctx f then
 			gen_value ctx eif
@@ -628,6 +630,9 @@ and gen_expr ctx e =
 		print ctx "%s(" (ctx.type_accessor (TClassDecl c));
 		concat ctx "," (gen_value ctx) el;
 		spr ctx ")"
+	| TIf ({ eexpr = TCall ({ eexpr = TField (_, FStatic ({ cl_path = ["haxe";"macro"],"Features"}, { cf_name = "hasFeature" })) }, [efeature]) },ethen,eelse)
+	| TIf ({ eexpr = TParenthesis { eexpr = TCall ({ eexpr = TField (_, FStatic ({ cl_path = ["haxe";"macro"],"Features"}, { cf_name = "hasFeature" })) }, [efeature]) } },ethen,eelse) ->
+		Common.FeatureHandler.has_feature ctx.com efeature ethen eelse (gen_expr ctx)
 	| TIf (cond,e,eelse) ->
 		spr ctx "if";
 		gen_value ctx cond;
@@ -757,6 +762,11 @@ and gen_block_element ?(after=false) ctx e =
 	match e.eexpr with
 	| TBlock el ->
 		List.iter (gen_block_element ~after ctx) el
+	| TIf ({ eexpr = TCall ({ eexpr = TField (_, FStatic ({ cl_path = ["haxe";"macro"],"Features"}, { cf_name = "hasFeature" })) }, [efeature]) },ethen,eelse)
+	| TIf ({ eexpr = TParenthesis { eexpr = TCall ({ eexpr = TField (_, FStatic ({ cl_path = ["haxe";"macro"],"Features"}, { cf_name = "hasFeature" })) }, [efeature]) } },ethen,eelse) ->
+		Common.FeatureHandler.has_feature ctx.com efeature ethen eelse (gen_block_element ~after ctx)
+	| TCall ({ eexpr = TField (_, FStatic ({ cl_path = ["haxe";"macro"],"Features"}, { cf_name = "defineFeature" })) }, _) ->
+		()
 	| TCall ({ eexpr = TIdent "__feature__" }, { eexpr = TConst (TString f) } :: eif :: eelse) ->
 		if has_feature ctx f then
 			gen_block_element ~after ctx eif
@@ -822,6 +832,9 @@ and gen_value ctx e =
 		gen_expr ctx e
 	| TMeta (_,e1) ->
 		gen_value ctx e1
+	| TCall ({ eexpr = TField (_, FStatic ({ cl_path = ["haxe";"macro"],"Features"}, { cf_name = "hasFeature" }))}, [efeature]) ->
+		let feature_name = FeatureHandler.get_feature_name efeature in
+		spr ctx (if has_feature ctx feature_name then "true" else "false")
 	| TCall (e,el) ->
 		gen_call ctx e el true
 	| TReturn _
@@ -860,6 +873,9 @@ and gen_value ctx e =
 		in
 		loop el;
 		v();
+	| TIf ({ eexpr = TCall ({ eexpr = TField (_, FStatic ({ cl_path = ["haxe";"macro"],"Features"}, { cf_name = "hasFeature" })) }, [efeature]) },ethen,eelse)
+	| TIf ({ eexpr = TParenthesis { eexpr = TCall ({ eexpr = TField (_, FStatic ({ cl_path = ["haxe";"macro"],"Features"}, { cf_name = "hasFeature" })) }, [efeature]) } },ethen,eelse) ->
+		Common.FeatureHandler.has_feature ctx.com efeature ethen eelse (gen_value ctx)
 	| TIf (cond,e,eo) ->
 		(* remove parenthesis unless it's an operation with higher precedence than ?: *)
 		let cond = (match cond.eexpr with

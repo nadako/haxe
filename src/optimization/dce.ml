@@ -502,7 +502,10 @@ and expr dce e =
 		Hashtbl.replace dce.curclass.cl_module.m_extra.m_features ft true;
 		check_feature dce ft;
 		expr dce e;
-
+	| TCall ({eexpr = TField (_, FStatic ({ cl_path = ["haxe";"macro"],"Features"}, { cf_name = "defineFeature" }))},[efeature]) ->
+		let ft = Common.FeatureHandler.get_feature_name efeature in
+		Hashtbl.replace dce.curclass.cl_module.m_extra.m_features ft true;
+		check_feature dce ft
 	(* keep toString method of T when array<T>.join() is called *)
 	| TCall ({eexpr = TField(_, FInstance({cl_path = ([],"Array")}, pl, {cf_name="join"}))} as ef, args) ->
 		List.iter (fun e -> to_string dce e) pl;
