@@ -329,12 +329,27 @@ let make_class_ns c =
 
 let is_cf_protected cf = Meta.has Meta.Protected cf.cf_meta
 
+let has_cf_ns cf = 
+	try
+		let (_,params,_) = Meta.get Meta.Ns cf.cf_meta in
+		match params with
+		| [(EConst (String ns),_)] -> Some (ns,false)
+		| [(EConst (String ns),_); (EConst (Ident "internal"),_)] -> Some (ns,true)
+		| _ -> assert false
+	with Not_found ->
+		None
+
 let property ctx fa t =
+	let p = field_name fa in
+	let ns = Option.map_default has_cf_ns None (extract_field fa) in
+	match ns with
+	| Some (ns,false) -> HMName (reserved p, HNNamespace ns), None, false
+	| Some (ns,true) -> HMName (reserved p, HNInternal (Some ns)), None, false
+	| None ->
 	match fa with
 	| FStatic (c, cf) when is_cf_protected cf ->
 		HMName (reserved cf.cf_name, HNStaticProtected (Some (make_class_ns c))), None, false
 	| _ ->
-	let p = field_name fa in
 	match follow t with
 	| TInst ({ cl_path = [],"Array" },_) ->
 		(match p with
