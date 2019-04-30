@@ -1432,15 +1432,15 @@ and gen_call ctx retval e el r =
 	| TIdent "__float__", [e] ->
 		gen_expr ctx true e;
 		write ctx HToNumber
-	| TIdent "__foreach__", [obj;counter] ->
+	| (TField (_, FStatic ({ cl_path = ["flash"],"Syntax" }, { cf_name = "nextvalue" })) | TIdent "__foreach__"), [obj;counter] ->
 		gen_expr ctx true obj;
 		gen_expr ctx true counter;
 		write ctx HForEach
-	| TIdent "__forin__", [obj;counter] ->
+	| (TField (_, FStatic ({ cl_path = ["flash"],"Syntax" }, { cf_name = "nextname" })) | TIdent "__forin__"), [obj;counter] ->
 		gen_expr ctx true obj;
 		gen_expr ctx true counter;
 		write ctx HForIn
-	| TIdent "__has_next__", [obj;counter] ->
+	| (TField (_, FStatic ({ cl_path = ["flash"],"Syntax" }, { cf_name = "hasnext2" })) | TIdent "__has_next__"), [obj;counter] ->
 		let oreg = match gen_access ctx obj Read with VReg r -> r | _ -> abort "Must be a local variable" obj.epos in
 		let creg = match gen_access ctx counter Read with VReg r -> r | _ -> abort "Must be a local variable" obj.epos in
 		write ctx (HNext (oreg.rid,creg.rid))
