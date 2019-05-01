@@ -118,6 +118,30 @@ let tid (x : 'a index) : int = Obj.magic x
 let ethis = mk (TConst TThis) (mk_mono()) null_pos
 let dynamic_prop = HMMultiNameLate [HNPublic (Some "")]
 
+let is_getter_method_name name = ExtString.String.starts_with name "get_"
+let is_setter_method_name name = ExtString.String.starts_with name "set_"
+let get_native_property_name accessor_name = String.sub accessor_name 4 (String.length accessor_name - 4)
+
+let find_native_property c tl accessor_name =
+	let prop_name = get_native_property_name accessor_name in
+	try
+		match Type.class_field c tl prop_name with
+		| Some (c, tl), _, cf ->
+			ignore (Meta.get Meta.FlashProperty cf.cf_meta); (* this will raise Not_found *)
+			Some (c, tl, cf)
+		| _ -> assert false
+	with Not_found ->
+		None
+
+let find_native_static_property c accessor_name =
+	let prop_name = get_native_property_name accessor_name in
+	try
+		let cf = PMap.find prop_name c.cl_statics in
+		ignore (Meta.get Meta.FlashProperty cf.cf_meta); (* this will raise Not_found *)
+		Some cf
+	with Not_found ->
+		None
+
 let is_special_compare e1 e2 =
 	match e1.eexpr, e2.eexpr with
 	| TConst TNull, _  | _ , TConst TNull -> None
@@ -1528,17 +1552,48 @@ and gen_call ctx retval e el r =
 		end else
 			write ctx (HCallPropVoid (id,List.length el))
 	| TField (e1,f) , _ ->
-		let old = ctx.for_call in
-		ctx.for_call <- true;
-		gen_expr ctx true e1;
-		let id , _, _ = property ctx f e1.etype in
-		ctx.for_call <- old;
-		List.iter (gen_expr ctx true) el;
-		if retval then begin
-			write ctx (HCallProperty (id,List.length el));
-			coerce ctx (classify ctx r);
-		end else
-			write ctx (HCallPropVoid (id,List.length el))
+		let default () =
+			let old = ctx.for_call in
+			ctx.for_call <- true;
+			gen_expr ctx true e1;
+			let id , _, _ = property ctx f e1.etype in
+			ctx.for_call <- old;
+			List.iter (gen_expr ctx true) el;
+			if retval then begin
+				write ctx (HCallProperty (id,List.length el));
+				coerce ctx (classify ctx r);
+			end else
+				write ctx (HCallPropVoid (id,List.length el))
+		in
+		let gen_real_prop_access c tl accessor_name f =
+			if c.cl_extern then
+				match find_native_property c tl accessor_name with
+				| Some (c, tl, cf) -> f (mk (TField (e1, FInstance (c, tl, cf))) cf.cf_type e.epos)
+				| None -> default ()
+			else
+				default ()
+		in
+		let gen_real_static_prop_access c accessor_name f =
+			if c.cl_extern then
+				match find_native_static_property c accessor_name with
+				| Some cf -> f (mk (TField (e1, FStatic (c, cf))) cf.cf_type e.epos)
+				| None -> default ()
+			else
+				default ()
+		in
+		let gen_read e = getvar ctx (gen_access ctx e Read) in
+		let gen_assign value e = gen_assign ctx retval e value in
+		(match (follow e1.etype, f), el with
+		| ((_, FInstance (c, tl, { cf_name = name })) | (TInst (c, tl), FDynamic name)), [] when is_getter_method_name name ->
+			gen_real_prop_access c tl name gen_read
+		| (_, FInstance (c, tl, { cf_name = name }) | (TInst (c, tl), FDynamic name)), [value] when is_setter_method_name name ->
+			gen_real_prop_access c tl name (gen_assign value)
+		| (_, FStatic (c, { cf_name = name }) | (TAnon { a_status = { contents = Statics c } }, FDynamic name)), [] when is_getter_method_name name ->
+			gen_real_static_prop_access c name gen_read
+		| (_, FStatic (c, { cf_name = name }) | (TAnon { a_status = { contents = Statics c } }, FDynamic name)), [value] when is_setter_method_name name ->
+			gen_real_static_prop_access c name (gen_assign value)
+		| _ ->
+			default ())
 	| _ ->
 		gen_expr ctx true e;
 		write ctx HGetGlobalScope;
@@ -1596,6 +1651,11 @@ and check_binop ctx e1 e2 =
 	| _ -> false) in
 	if invalid then abort "Comparison of Int and UInt might lead to unexpected results" (punion e1.epos e2.epos);
 
+and gen_assign ctx retval lhs rhs =
+	let acc = gen_access ctx lhs Write in
+	gen_expr ctx true rhs;
+	setvar ctx acc (if retval then Some (classify ctx lhs.etype) else None)
+
 and gen_binop ctx retval op e1 e2 t p =
 	let write_op op =
 		let iop = (match op with
@@ -1651,9 +1711,7 @@ and gen_binop ctx retval op e1 e2 t p =
 	in
 	match op with
 	| OpAssign ->
-		let acc = gen_access ctx e1 Write in
-		gen_expr ctx true e2;
-		setvar ctx acc (if retval then Some (classify ctx e1.etype) else None)
+		gen_assign ctx retval e1 e2
 	| OpBoolAnd ->
 		write ctx HFalse;
 		let j = jump_expr ctx e1 false in
@@ -1980,12 +2038,6 @@ let generate_field_kind ctx f c stat =
 	if not (is_physical_field f) then None else
 	match f.cf_expr with
 	| Some { eexpr = TFunction fdata } ->
-		let rec loop c name =
-			match c.cl_super with
-			| None -> false
-			| Some (c,_) ->
-				PMap.exists name c.cl_fields || loop c name
-		in
 		(match f.cf_kind with
 		| Method MethDynamic when List.memq f c.cl_overrides ->
 			None
@@ -2001,7 +2053,7 @@ let generate_field_kind ctx f c stat =
 			Some (HFMethod {
 				hlm_type = m;
 				hlm_final = stat || (has_class_field_flag f CfFinal);
-				hlm_override = not stat && (loop c name || loop c f.cf_name);
+				hlm_override = not stat && List.memq f c.cl_overrides;
 				hlm_kind = kind;
 			})
 		);
@@ -2084,6 +2136,7 @@ let generate_class ctx c =
 			| _ -> assert false
 	) in
 	let has_protected = ref None in
+	let make_interface_field_name ci f = HMName (reserved f.cf_name, HNNamespace (make_class_ns ci)) in
 	let make_name f stat =
 		let rec find_meta c =
 			try
@@ -2115,20 +2168,178 @@ let generate_class ctx c =
 				| _ -> loop_meta l
 		in
 		if c.cl_interface then
-			HMName (reserved f.cf_name, HNNamespace (make_class_ns c))
+			make_interface_field_name c f
 		else
 			loop_meta (find_meta c)
 	in
-	let generate_prop f acc alloc_slot =
+	let handle_accessor_overrides cl_prop cl cf_accessor =
+		if cl_prop == cl then
+			true, false (* accessor is defined in the same class as the property itself: need to generate, nothing to modify *)
+		else if not cl_prop.cl_extern then
+			false, false (* property is not extern, so the native accessor is already handled by the parent class, don't need to do anything at all *)
+		else begin
+			let rec is_first_nonextern_override cl =
+				match cl.cl_super with
+				| Some (csup,_) ->
+					if csup.cl_extern then true
+					else if PMap.mem cf_accessor.cf_name csup.cl_fields then false
+					else is_first_nonextern_override csup
+				| None ->
+					false
+			in
+			if is_first_nonextern_override cl then begin
+				(* this is a first non-extern accessor override, so we need to:
+				    * generate a native getter override
+					* remove `override` from the haxe getter
+				*)
+				c.cl_overrides <- List.filter (fun cf -> cf != cf_accessor) c.cl_overrides;
+				true, true
+			end else
+				false, false
+		end
+	in
+	let generate_prop static f acc alloc_slot =
+		let find_native_property accessor_name =
+			let tl = List.map snd c.cl_params in
+			find_native_property c tl accessor_name
+		in
 		match f.cf_kind with
-		| Method _ -> acc
-		| Var v ->
-			(* let p = f.cf_pos in *)
-			(* let ethis = mk (TConst TThis) (TInst (c,[])) p in *)
+		| Method _ when is_getter_method_name f.cf_name ->
+			begin
+			if not static then
+				match find_native_property f.cf_name with
+				| Some (prop_cl, prop_tl, prop_cf) ->
+					let needs_accessor, overriden_accessor = handle_accessor_overrides prop_cl c f in
+					if not needs_accessor then
+						acc
+					else
+						let mtype, name, overriden_accessor =
+							if not c.cl_interface then
+								let func = {
+									tf_args = [];
+									tf_type = prop_cf.cf_type;
+									tf_expr = begin
+										let ethis = mk (TConst TThis) (TInst (prop_cl, prop_tl)) null_pos in
+										let emethod = mk (TField (ethis, FInstance (prop_cl, prop_tl, f))) f.cf_type null_pos in
+										let ecall = mk (TCall (emethod, [])) prop_cf.cf_type null_pos in
+										mk (TReturn (Some ecall)) ctx.com.basic.tvoid null_pos
+									end;
+								} in
+								generate_method ctx func false [], ident prop_cf.cf_name, overriden_accessor
+							else
+								end_fun ctx [] None prop_cf.cf_type, make_interface_field_name c prop_cf, false
+						in
+						{
+							hlf_name = name;
+							hlf_slot = alloc_slot ();
+							hlf_kind = HFMethod {
+								hlm_type = mtype;
+								hlm_final = false;
+								hlm_override = overriden_accessor;
+								hlm_kind = MK3Getter;
+							};
+							hlf_metas = None;
+						} :: acc
+				| _ ->
+					acc
+			else
+				match find_native_static_property c f.cf_name with
+				| Some prop_cf ->
+					let func = {
+						tf_args = [];
+						tf_type = prop_cf.cf_type;
+						tf_expr = begin
+							let emethod = Typecore.make_static_field_access c f f.cf_type null_pos in
+							let ecall = mk (TCall (emethod, [])) prop_cf.cf_type null_pos in
+							mk (TReturn (Some ecall)) ctx.com.basic.tvoid null_pos
+						end;
+					} in
+					{
+						hlf_name = ident prop_cf.cf_name;
+						hlf_slot = alloc_slot ();
+						hlf_kind = HFMethod {
+							hlm_type = generate_method ctx func true [];
+							hlm_final = true;
+							hlm_override = false;
+							hlm_kind = MK3Getter;
+						};
+						hlf_metas = None;
+					} :: acc
+				| _ ->
+					acc
+			end
+		| Method _ when is_setter_method_name f.cf_name ->
+			begin
+			if not static then
+				match find_native_property f.cf_name with
+				| Some (prop_cl, prop_tl, prop_cf) ->
+					let needs_accessor, overriden_accessor = handle_accessor_overrides prop_cl c f in
+					if not needs_accessor then
+						acc
+					else
+						let varg = alloc_var (VUser TVOArgument) "value" prop_cf.cf_type null_pos in
+
+						let mtype, name, overriden_accessor =
+							if not c.cl_interface then
+								let func = {
+									tf_args = [(varg,None)];
+									tf_type = ctx.com.basic.tvoid;
+									tf_expr = begin
+										let ethis = mk (TConst TThis) (TInst (prop_cl, prop_tl)) null_pos in
+										let emethod = mk (TField (ethis, FInstance (prop_cl, prop_tl, f))) f.cf_type null_pos in
+										let elocal = Texpr.Builder.make_local varg null_pos in
+										mk (TCall (emethod, [elocal])) prop_cf.cf_type null_pos
+									end;
+								} in
+								generate_method ctx func false [], ident prop_cf.cf_name, overriden_accessor
+							else
+								end_fun ctx [(varg,None)] None ctx.com.basic.tvoid, make_interface_field_name c prop_cf, false
+						in
+						{
+							hlf_name = name;
+							hlf_slot = alloc_slot ();
+							hlf_kind = HFMethod {
+								hlm_type = mtype;
+								hlm_final = false;
+								hlm_override = overriden_accessor;
+								hlm_kind = MK3Setter;
+							};
+							hlf_metas = None;
+						} :: acc
+				| _ ->
+					acc
+			else
+				match find_native_static_property c f.cf_name with
+				| Some prop_cf ->
+					let varg = alloc_var (VUser TVOArgument) "value" prop_cf.cf_type null_pos in
+					let func = {
+						tf_args = [(varg,None)];
+						tf_type = ctx.com.basic.tvoid;
+						tf_expr = begin
+							let emethod = Typecore.make_static_field_access c f f.cf_type null_pos in
+							let elocal = Texpr.Builder.make_local varg null_pos in
+							mk (TCall (emethod, [elocal])) prop_cf.cf_type null_pos
+						end;
+					} in
+					{
+						hlf_name = ident prop_cf.cf_name;
+						hlf_slot = alloc_slot ();
+						hlf_kind = HFMethod {
+							hlm_type = generate_method ctx func true [];
+							hlm_final = true;
+							hlm_override = false;
+							hlm_kind = MK3Setter;
+						};
+						hlf_metas = None;
+					} :: acc
+				| _ ->
+					acc
+			end
+		| Method _ | Var _ ->
 			acc
 	in
 	let fields = PMap.fold (fun f acc ->
-		let acc = generate_prop f acc (fun() -> 0) in
+		let acc = generate_prop false f acc (fun() -> 0) in
 		match generate_field_kind ctx f c false with
 		| None -> acc
 		| Some k ->
@@ -2159,7 +2370,7 @@ let generate_class ctx c =
 	let st_field_count = ref 0 in
 	let st_meth_count = ref 0 in
 	let statics = List.rev (List.fold_left (fun acc f ->
-		let acc = generate_prop f acc (fun() -> incr st_meth_count; !st_meth_count) in
+		let acc = generate_prop true f acc (fun() -> incr st_meth_count; !st_meth_count) in
 		match generate_field_kind ctx f c true with
 		| None -> acc
 		| Some k ->
