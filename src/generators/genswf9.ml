@@ -1536,34 +1536,36 @@ and gen_call ctx retval e el r =
 		write ctx HThis;
 		List.iter (gen_expr ctx true) el;
 		write ctx (HConstructSuper (List.length el));
-	| TField ({ eexpr = TConst TSuper },f) , _ ->
-		let id = this_property f in
-		write ctx (HFindPropStrict id);
-		List.iter (gen_expr ctx true) el;
-		write ctx (HCallSuper (id,List.length el));
-		coerce ctx (classify ctx r);
-	| TField ({ eexpr = TConst TThis },f) , _ when not ctx.in_static ->
-		let id = this_property f in
-		write ctx (HFindProp id);
-		List.iter (gen_expr ctx true) el;
-		if retval then begin
-			write ctx (HCallProperty (id,List.length el));
-			coerce ctx (classify ctx r);
-		end else
-			write ctx (HCallPropVoid (id,List.length el))
 	| TField (e1,f) , _ ->
 		let default () =
-			let old = ctx.for_call in
-			ctx.for_call <- true;
-			gen_expr ctx true e1;
-			let id , _, _ = property ctx f e1.etype in
-			ctx.for_call <- old;
-			List.iter (gen_expr ctx true) el;
-			if retval then begin
-				write ctx (HCallProperty (id,List.length el));
-				coerce ctx (classify ctx r);
-			end else
-				write ctx (HCallPropVoid (id,List.length el))
+			match e1 with 
+			| { eexpr = TConst TSuper } ->
+				let id = this_property f in
+				write ctx (HFindPropStrict id);
+				List.iter (gen_expr ctx true) el;
+				write ctx (HCallSuper (id,List.length el));
+				coerce ctx (classify ctx r)
+			| { eexpr = TConst TThis } when not ctx.in_static ->
+				let id = this_property f in
+				write ctx (HFindProp id);
+				List.iter (gen_expr ctx true) el;
+				if retval then begin
+					write ctx (HCallProperty (id,List.length el));
+					coerce ctx (classify ctx r);
+				end else
+					write ctx (HCallPropVoid (id,List.length el))
+			| _ ->
+				let old = ctx.for_call in
+				ctx.for_call <- true;
+				gen_expr ctx true e1;
+				let id , _, _ = property ctx f e1.etype in
+				ctx.for_call <- old;
+				List.iter (gen_expr ctx true) el;
+				if retval then begin
+					write ctx (HCallProperty (id,List.length el));
+					coerce ctx (classify ctx r);
+				end else
+					write ctx (HCallPropVoid (id,List.length el))
 		in
 		let gen_real_prop_access c tl accessor_name f =
 			if c.cl_extern then
