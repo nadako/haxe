@@ -559,6 +559,16 @@ enum ExprDef {
 		A `@m e` expression.
 	**/
 	EMeta(s:MetadataEntry, e:Expr);
+
+	/**
+		Optional array access `e1?[e2]`.
+	**/
+	EOptArray(e1:Expr, e2:Expr);
+
+	/**
+		Optional field access on `e?.field`.
+	**/
+	EOptField(e:Expr, field:String);
 }
 
 enum DisplayKind {

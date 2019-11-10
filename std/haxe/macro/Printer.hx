@@ -257,6 +257,8 @@ class Printer {
 			case ETernary(econd, eif, eelse): '${printExpr(econd)} ? ${printExpr(eif)} : ${printExpr(eelse)}';
 			case ECheckType(e1, ct): '(${printExpr(e1)} : ${printComplexType(ct)})';
 			case EMeta(meta, e1): printMetadata(meta) + " " + printExpr(e1);
+			case EOptArray(e1, e2): '${printExpr(e1)}?[${printExpr(e2)}]';
+			case EOptField(e1, n): '${printExpr(e1)}?.$n';
 		}
 
 	public function printExprs(el:Array<Expr>, sep:String) {
@@ -514,6 +516,13 @@ class Printer {
 					loopI(e);
 				case EMeta(s, e):
 					add("EMeta " + printMetadata(s));
+					loopI(e);
+				case EOptArray(e1, e2):
+					add("EOptArray");
+					loopI(e1);
+					loopI(e2);
+				case EOptField(e, field):
+					add("EOptField " + field);
 					loopI(e);
 			}
 		}

@@ -1411,7 +1411,7 @@ and handle_efield ctx e p mode =
 	*)
 	let rec loop acc (e,p) =
 		match e with
-		| EField (e,s) ->
+		| EField (e,s) | EOptField (e,s) ->
 			loop ((s,not (is_lower_ident s p),p) :: acc) e
 		| EConst (Ident i) ->
 			type_path ((i,not (is_lower_ident i p),p) :: acc)
@@ -1454,9 +1454,9 @@ and type_access ctx e p mode =
 				}) (TFun ((List.map (fun v -> v.v_name,false,v.v_type) vl),t)) p)
 			| _ -> error "Binding new is only allowed on class types" p
 		end;
-	| EField _ ->
+	| EField _ | EOptField _ ->
 		handle_efield ctx e p mode
-	| EArray (e1,e2) ->
+	| EArray (e1,e2) | EOptArray(e1,e2) ->
 		type_array_access ctx e1 e2 p mode
 	| EDisplay (e,dk) ->
 		let resume_typing = type_expr ~mode in
@@ -2467,8 +2467,8 @@ and type_expr ?(mode=MGet) ctx (e,p) (with_type:WithType.t) =
 		if s = "super" && with_type <> WithType.NoValue && not ctx.in_display then error "Cannot use super as value" p;
 		let e = maybe_type_against_enum ctx (fun () -> type_ident ctx s p mode) with_type false p in
 		acc_get ctx e p
-	| EField _
-	| EArray _ ->
+	| EField _ | EOptField _
+	| EArray _ | EOptArray _ ->
 		acc_get ctx (type_access ctx e p mode) p
 	| EConst (Regexp (r,opt)) ->
 		let str = mk (TConst (TString r)) ctx.t.tstring p in

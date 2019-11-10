@@ -212,7 +212,7 @@ let rec expr_to_value ctx env e =
 					value
 				| _ -> raise Exit
 			end
-		| EArray(e1,eidx) ->
+		| EArray(e1,eidx) | EOptArray(e1,eidx) (* TODO: opt array *) ->
 			let v1 = loop e1 in
 			let vidx = loop eidx in
 			let idx = match vidx with VInt32 i -> Int32.to_int i | _ -> raise Exit in
@@ -222,7 +222,7 @@ let rec expr_to_value ctx env e =
 				| VEnumValue ev -> Array.get ev.eargs idx
 				| _ -> raise Exit
 			end
-		| EField(e1,s) ->
+		| EField(e1,s) | EOptField(e1,s) (* TODO: opt field *) ->
 			let v1 = loop e1 in
 			let s' = hash s in
 			begin match v1 with

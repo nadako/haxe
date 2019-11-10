@@ -1390,8 +1390,22 @@ and expr_next' e1 = parser
 		expr_next (EUnop (op,Postfix,e1), punion (pos e1) p) s
 	| [< '(Question,_); e2 = expr; s >] ->
 		begin match s with parser
-		| [< '(DblDot,_); e3 = expr >] -> (ETernary (e1,e2,e3),punion (pos e1) (pos e3))
-		| [< >] -> syntax_error (Expected [":"]) s e2
+		| [< '(DblDot,_); e3 = expr >] ->
+			ETernary (e1,e2,e3),punion (pos e1) (pos e3)
+		| [< >] ->
+			(* TODO: only parse `EOptArray` if there's nothing between `?` and `[` *)
+			(match e2 with
+			| (EArrayDecl [eindex], p2) ->
+				EOptArray (e1, eindex), punion (pos e1) p2
+			| (ETernary (econd, (EArrayDecl [eindex], pindex), eelse), p2) ->
+				ETernary (
+					e1,
+					(EOptArray (econd, eindex), punion (pos econd) pindex),
+					eelse
+				),
+				punion (pos e1) p2
+			| _ ->
+				syntax_error (Expected [":"]) s e2)
 		end
 	| [< '(Kwd In,_); e2 = expr >] ->
 		make_binop OpIn e1 e2

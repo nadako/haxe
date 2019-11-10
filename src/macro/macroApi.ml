@@ -499,6 +499,10 @@ and encode_expr e =
 				27, [loop e; encode_ctype t]
 			| EMeta (m,e) ->
 				28, [encode_meta_entry m;loop e]
+			| EOptArray (e1,e2) ->
+				29, [loop e1;loop e2]
+			| EOptField (e,f) ->
+				30, [loop e;encode_string f]
 		in
 		encode_obj [
 			"pos", encode_pos p;
@@ -814,8 +818,10 @@ and decode_expr v =
 			ECheckType (loop e, (decode_ctype t))
 		| 28, [m;e] ->
 			EMeta (decode_meta_entry m,loop e)
-		| 29, [e;f] ->
-			EField (loop e, decode_string f) (*** deprecated EType, keep until haxe 3 **)
+		| 29, [e1;e2] ->
+			EOptArray (loop e1, loop e2)
+		| 30, [e;f] ->
+			EOptField (loop e, decode_string f)
 		| _ ->
 			raise Invalid_expr
 	in

@@ -329,7 +329,7 @@ let reify in_macro =
 		| ECheckType (e1,ct) ->
 			expr "ECheckType" [loop e1; to_type_hint ct p]
 		| EMeta ((m,ml,p),e1) ->
-			match m, ml with
+			(match m, ml with
 			| Meta.Dollar ("" | "e"), _ ->
 				e1
 			| Meta.Dollar "a", _ ->
@@ -355,7 +355,12 @@ let reify in_macro =
 				cur_pos := old;
 				e
 			| _ ->
-				expr "EMeta" [to_obj [("name",to_string (Meta.to_string m) p);("params",to_expr_array ml p);("pos",to_pos p)] p;loop e1]
+				expr "EMeta" [to_obj [("name",to_string (Meta.to_string m) p);("params",to_expr_array ml p);("pos",to_pos p)] p;loop e1])
+		| EOptArray (e1,e2) ->
+			expr "EOptArray" [loop e1;loop e2]
+		| EOptField (e,s) ->
+			let p = {p with pmin = p.pmax - String.length s} in
+			expr "EOptField" [loop e; to_string s p]
 	and to_tparam_decl p t =
 		to_obj [
 			"name", to_placed_name t.tp_name;

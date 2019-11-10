@@ -71,9 +71,9 @@ class ExprTools {
 	static public function iter(e:Expr, f:Expr->Void):Void {
 		switch (e.expr) {
 			case EConst(_), EContinue, EBreak, EDisplayNew(_):
-			case EField(e, _), EParenthesis(e), EUntyped(e), EThrow(e), EDisplay(e, _), ECheckType(e, _), EUnop(_, _, e), ECast(e, _), EMeta(_, e):
+			case EField(e, _), EOptField(e, _), EParenthesis(e), EUntyped(e), EThrow(e), EDisplay(e, _), ECheckType(e, _), EUnop(_, _, e), ECast(e, _), EMeta(_, e):
 				f(e);
-			case EArray(e1, e2), EWhile(e1, e2, _), EBinop(_, e1, e2), EFor(e1, e2):
+			case EArray(e1, e2), EOptArray(e1, e2), EWhile(e1, e2, _), EBinop(_, e1, e2), EFor(e1, e2):
 				f(e1);
 				f(e2);
 			case EVars(vl):
@@ -203,6 +203,8 @@ class ExprTools {
 						expr: f(func.expr)
 					});
 				case EMeta(m, e): EMeta(m, f(e));
+				case EOptArray(e1, e2): EOptArray(f(e1), f(e2));
+				case EOptField(e, field): EOptField(f(e), field);
 			}
 		};
 	}
