@@ -190,50 +190,60 @@ let field_access ctx mode f fh e pfield =
 		let normal inline =
 			AKField (make_access inline)
 		in
-		match (match mode with MGet | MCall _ -> v.v_read | MSet _ -> v.v_write) with
-		| AccNo when not (Meta.has Meta.PrivateAccess ctx.meta) ->
-			(match follow e.etype with
+		let can_access () =
+			match follow e.etype with
 			| TInst (c,_) when extends ctx.curclass c || can_access ctx c { f with cf_flags = unset_flag f.cf_flags (int_of_class_field_flag CfPublic) } false ->
-				normal false
+				true
 			| TAnon a ->
 				(match !(a.a_status) with
-				| Statics c2 when ctx.curclass == c2 || can_access ctx c2 { f with cf_flags = unset_flag f.cf_flags (int_of_class_field_flag CfPublic) } true -> normal false
-				| _ -> if ctx.untyped then normal false else AKNo f.cf_name)
+				| Statics c2 when ctx.curclass == c2 || can_access ctx c2 { f with cf_flags = unset_flag f.cf_flags (int_of_class_field_flag CfPublic) } true ->
+					true
+				| _ ->
+					ctx.untyped)
 			| _ ->
-				if ctx.untyped then normal false else AKNo f.cf_name)
+				ctx.untyped
+		in
+		match (match mode with MGet | MCall _ -> v.v_read | MSet _ -> v.v_write) with
+		| AccNo when not (Meta.has Meta.PrivateAccess ctx.meta) ->
+			if can_access () then (normal false) else AKNo f.cf_name
 		| AccNormal | AccNo ->
 			normal false
 		| AccCall when ctx.in_display && DisplayPosition.display_position#enclosed_in pfull ->
 			normal false
 		| AccCall ->
-			let m = (match mode with MSet _ -> "set_" | _ -> "get_") ^ f.cf_name in
-			let bypass_accessor =
-				bypass_accessor
-				||
-				(
-					m = ctx.curfield.cf_name
-					&&
-					match e.eexpr with
-					| TConst TThis -> true
-					| TLocal v -> Option.map_default (fun vthis -> v == vthis) false ctx.vthis
-					| TTypeExpr (TClassDecl c) when c == ctx.curclass -> true
-					| _ -> false
+			let is_set = match mode with MSet _ -> true | _ -> false in
+			if is_set && Meta.has (Meta.Custom ":privateSet") f.cf_meta && not (Meta.has Meta.PrivateAccess ctx.meta) && not (can_access ()) then
+				AKNo f.cf_name
+			else begin
+				let m = (if is_set then "set_" else "get_") ^ f.cf_name in
+				let bypass_accessor =
+					bypass_accessor
+					||
+					(
+						m = ctx.curfield.cf_name
+						&&
+						match e.eexpr with
+						| TConst TThis -> true
+						| TLocal v -> Option.map_default (fun vthis -> v == vthis) false ctx.vthis
+						| TTypeExpr (TClassDecl c) when c == ctx.curclass -> true
+						| _ -> false
+					)
+				in
+				if bypass_accessor then (
+					(match e.eexpr with TLocal _ when Common.defined ctx.com Define.Haxe3Compat -> ctx.com.warning "Field set has changed here in Haxe 4: call setter explicitly to keep Haxe 3.x behaviour" pfield | _ -> ());
+					if not (is_physical_field f) then begin
+						display_error ctx "This field cannot be accessed because it is not a real variable" pfield;
+						display_error ctx "Add @:isVar here to enable it" f.cf_pos;
+					end;
+					normal false
 				)
-			in
-			if bypass_accessor then (
-				(match e.eexpr with TLocal _ when Common.defined ctx.com Define.Haxe3Compat -> ctx.com.warning "Field set has changed here in Haxe 4: call setter explicitly to keep Haxe 3.x behaviour" pfield | _ -> ());
-				if not (is_physical_field f) then begin
-					display_error ctx "This field cannot be accessed because it is not a real variable" pfield;
-					display_error ctx "Add @:isVar here to enable it" f.cf_pos;
-				end;
-				normal false
-			)
-			else begin match fh with
-			| FHAbstract(a,tl,c) ->
-				let sea = make_abstract_static_extension_access a tl c f e false pfull in
-				AKUsingAccessor sea
-			| _ ->
-				AKAccessor (make_access false)
+				else begin match fh with
+				| FHAbstract(a,tl,c) ->
+					let sea = make_abstract_static_extension_access a tl c f e false pfull in
+					AKUsingAccessor sea
+				| _ ->
+					AKAccessor (make_access false)
+				end
 			end
 		| AccNever ->
 			if ctx.untyped then normal false else AKNo f.cf_name

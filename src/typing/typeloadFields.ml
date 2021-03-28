@@ -1431,10 +1431,11 @@ let create_property (ctx,cctx,fctx) c f (get,set,t,eo) p =
 		| "never",_ -> AccNever
 		| "dynamic",_ -> AccCall
 		| "default",_ -> AccNormal
-		| "set",pset ->
+		| ("set" | "privateSet") as keyword,pset ->
 			let set = "set_" ^ name in
 			if fctx.is_display_field && DisplayPosition.display_position#enclosed_in pset then delay ctx PConnectField (fun () -> display_accessor set pset);
 			if not cctx.is_lib then delay_check (fun() -> check_method set t_set false);
+			if keyword = "privateSet" then cf.cf_meta <- (Meta.Custom ":privateSet",[],null_pos) :: cf.cf_meta;
 			AccCall
 		| _,pset ->
 			display_error ctx (name ^ ": Custom property accessor is no longer supported, please use `set`") pset;
